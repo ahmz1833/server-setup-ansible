@@ -1,0 +1,41 @@
+---
+node_primary_user: "{{ core_primary_user | default('root') }}"
+
+node_tools_packages:
+  - zsh
+  - ripgrep
+  - git
+  - curl
+  - ca-certificates
+  - btop
+  - iotop
+  - iftop
+  - ncdu
+  - nmap
+  - mtr
+  - iperf3
+  - tcpdump
+  - jq
+  - netcat-openbsd
+
+# URL for custom dotfiles/shell setup script
+node_bootstrap_enabled: true
+node_bootstrap_script_url: "https://s3.ahmz.ir/dots/bootstrap.sh"
+
+node_singbox_install: "{{ core_is_iran }}"
+node_singbox_enabled: false
+node_singbox_version: "1.13.1"
+node_singbox_outbound:
+  type: socks
+  server: 127.0.0.1
+  server_port: 1080
+node_singbox_enable_tun: true
+
+node_gost_install: true
+node_gost_enabled: false
+node_gost_version: "3.2.6"
+node_gost_config: {}
+
+node_docker_enabled: true
+
+node_nginx_enabled: true

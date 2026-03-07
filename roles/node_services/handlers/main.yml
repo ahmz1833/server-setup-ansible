@@ -1,0 +1,17 @@
+---
+- name: Restart singbox
+  ansible.builtin.systemd:
+    name: sing-box
+    state: restarted
+    daemon_reload: yes
+
+- name: Restart gost
+  ansible.builtin.systemd:
+    name: gost
+    state: restarted
+    daemon_reload: yes
+
+- name: Restart nginx
+  ansible.builtin.systemd:
+    name: nginx
+    state: restarted

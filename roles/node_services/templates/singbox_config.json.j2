@@ -1,0 +1,159 @@
+{
+  "certificate": {
+    "store": "system"
+  },
+  "dns": {
+    "independent_cache": true,
+    "rules": [
+      {
+        "action": "predefined",
+        "answer": "localhost. IN A 127.0.0.1",
+        "domain": "localhost",
+        "query_type": "A",
+        "rcode": "NOERROR"
+      },
+      {% if core_enable_ipv6 | default(false) %}
+      {
+        "action": "predefined",
+        "answer": "localhost. IN AAAA ::1",
+        "domain": "localhost",
+        "query_type": "AAAA",
+        "rcode": "NOERROR"
+      },
+      {% endif %}
+      {
+        "action": "route",
+        "query_type": ["A"{% if core_enable_ipv6 | default(false) %}, "AAAA"{% endif %}],
+        "server": "dns-fake"
+      },
+      {
+        "action": "route",
+        "domain": [],
+        "domain_keyword": [],
+        "domain_regex": [],
+        "domain_suffix": [],
+        "rule_set": ["geosite-ir"],
+        "server": "dns-direct"
+      }
+    ],
+    "servers": [
+      {
+        "detour": "proxy",
+        "domain_resolver": "dns-local",
+        "server": "8.8.8.8",
+        "tag": "dns-remote",
+        "type": "tls"
+      },
+      {
+        "domain_resolver": "dns-local",
+        "tag": "dns-direct",
+        "type": "local"
+      },
+      {
+        "inet4_range": "198.18.0.0/15",
+        {% if core_enable_ipv6 | default(false) %}
+        "inet6_range": "fc00::/18",
+        {% endif %}
+        "tag": "dns-fake",
+        "type": "fakeip"
+      },
+      {
+        "tag": "dns-local",
+        "type": "local"
+      }
+    ]
+  },
+  "endpoints": [],
+  "experimental": {
+    "cache_file": {
+      "enabled": true,
+      "store_fakeip": true,
+      "store_rdrc": true
+    },
+    "clash_api": {
+      "default_mode": ""
+    }
+  },
+  "log": {
+    "level": "info"
+  },
+  "inbounds": [
+    {
+      "listen": "127.0.0.1",
+      "listen_port": 10808,
+      "tag": "mixed-in",
+      "type": "mixed"
+    }{% if node_singbox_enable_tun | default(true) %},
+    {
+      "address": [
+        "172.19.0.1/24"
+        {% if core_enable_ipv6 | default(false) %}
+        , "fdfe:dcba:9876::1/96"
+        {% endif %}
+      ],
+      "auto_redirect": true,
+      "auto_route": true,
+      "interface_name": "throne-tun",
+      "mtu": 1500,
+      "route_exclude_address_set": ["geoip-ir"],
+      "stack": "system",
+      "strict_route": true,
+      "tag": "tun-in",
+      "type": "tun"
+    }
+    {% endif %}
+  ],
+  "outbounds": [
+    {{ node_singbox_outbound | default({"type": "direct"}) | combine({"tag": "proxy"}) | to_json }},
+    {
+      "tag": "direct",
+      "type": "direct"
+    }
+  ],
+  "route": {
+    "auto_detect_interface": true,
+    "default_domain_resolver": {
+      "server": "dns-direct",
+      "strategy": ""
+    },
+    "final": "proxy",
+    "find_process": true,
+    "rule_set": [
+      {
+        "format": "binary",
+        "tag": "geoip-ir",
+        "type": "remote",
+        "url": "https://s3.ahmz.ir/rule-set/Iran-sing-box-rules/Chocolate4U/geoip-ir.srs"
+      },
+      {
+        "format": "binary",
+        "tag": "geosite-ir",
+        "type": "remote",
+        "url": "https://s3.ahmz.ir/rule-set/Iran-sing-box-rules/Chocolate4U/geosite-ir.srs"
+      }
+    ],
+    "rules": [
+      {
+        "action": "sniff",
+        "inbound": [
+          "mixed-in"{% if node_singbox_enable_tun | default(true) %},
+          "tun-in"{% endif %}
+        ]
+      },
+      {
+        "action": "hijack-dns",
+        "protocol": "dns"
+      },
+      {
+        "action": "route",
+        "ip_is_private": true,
+        "outbound": "direct"
+      },
+      {
+        "action": "route",
+        "outbound": "direct",
+        "rule_set": ["geoip-ir", "geosite-ir" ]
+      }
+    ]
+  }
+}

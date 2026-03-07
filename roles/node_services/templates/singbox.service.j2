@@ -1,0 +1,16 @@
+[Unit]
+Description=Sing-box Service
+Documentation=https://sing-box.sagernet.org
+After=network.target network-online.target nss-lookup.target
+
+[Service]
+Type=simple
+User=root
+Group=root
+ExecStart=/usr/local/bin/sing-box run -c /etc/sing-box/config.json
+Restart=on-failure
+RestartSec=5
+LimitNOFILE=65535
+
+[Install]
+WantedBy=multi-user.target
