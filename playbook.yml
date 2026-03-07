@@ -3,10 +3,10 @@
   hosts: all
   become: yes
   roles:
-    - role: core_setup
+    - role: core
 
 - name: Provision Node Services
   hosts: all
   become: yes
   roles:
-    - role: node_services
+    - role: node

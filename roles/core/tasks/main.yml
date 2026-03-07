@@ -1,30 +1,30 @@
 ---
 - name: Core Setup - System Configuration
-  import_tasks: system.yml
+  ansible.builtin.import_tasks: system.yml
   tags:
     - core-system
 
 - name: Core Setup - User Management
-  import_tasks: users.yml
+  ansible.builtin.import_tasks: users.yml
   tags:
     - core-users
   when: core_manage_users
 
 - name: Core Setup - SSH Configuration
-  import_tasks: ssh.yml
+  ansible.builtin.import_tasks: ssh.yml
   tags:
     - core-ssh
   when: core_manage_ssh
 
 - name: Core Setup - Firewall Configuration
-  import_tasks: firewall.yml
+  ansible.builtin.import_tasks: firewall.yml
   tags:
     - core-firewall
     - core-iptables
   when: core_manage_firewall
 
 - name: Core Setup - Sysctl and Fail2Ban Configuration
-  import_tasks: sysctl.yml
+  ansible.builtin.import_tasks: sysctl.yml
   tags:
     - core-sysctl
     - core-fail2ban

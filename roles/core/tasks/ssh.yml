@@ -1,12 +1,13 @@
 ---
 - name: Verify authorized keys for configured user
   ansible.builtin.shell: |
+    set -o pipefail
     target_user="{{ core_ssh_ensure_pub_key_user }}"
     if ! getent passwd "$target_user" >/dev/null; then exit 3; fi
     user_home=$(getent passwd "$target_user" | cut -d: -f6)
     if [ ! -f "$user_home/.ssh/authorized_keys" ]; then exit 2; fi
     grep -q 'ssh-' "$user_home/.ssh/authorized_keys"
-  register: pubkey_check
+  register: core_pubkey_check
   ignore_errors: true
   changed_when: false
   when: >
@@ -19,11 +20,13 @@
   when: >
     (not core_ssh_password_auth) and
     core_ssh_ensure_pub_key_user | length > 0 and
-    pubkey_check.rc != 0
+    core_pubkey_check.rc != 0
 
 - name: Verify a non-root user exists
-  ansible.builtin.shell: "getent passwd | awk -F: '$3 >= 1000 && $7 !~ /nologin|false/ {print $1}' | grep -v nobody | wc -l"
-  register: user_count_check
+  ansible.builtin.shell: |
+    set -o pipefail
+    getent passwd | awk -F: '$3 >= 1000 && $7 !~ /nologin|false/ {print $1}' | grep -v nobody | wc -l
+  register: core_user_count_check
   changed_when: false
   when: not core_ssh_permit_root_login
 
@@ -32,19 +35,19 @@
     msg: "No standard non-root users found. Cannot disable root login safely."
   when: >
     (not core_ssh_permit_root_login) and
-    user_count_check.stdout | int == 0
+    core_user_count_check.stdout | int == 0
 
 - name: Find extra SSH configuration files
   ansible.builtin.find:
     paths: /etc/ssh/sshd_config.d
     patterns: "*.conf"
-  register: ssh_extra_configs
+  register: core_ssh_extra_configs
 
 - name: Remove extra SSH configuration files
   ansible.builtin.file:
     path: "{{ item.path }}"
     state: absent
-  loop: "{{ ssh_extra_configs.files }}"
+  loop: "{{ core_ssh_extra_configs.files }}"
   notify: Restart sshd
 
 - name: Disable SSH config overrides

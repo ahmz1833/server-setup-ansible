@@ -21,7 +21,7 @@
 - name: Flush existing iptables rules
   ansible.builtin.iptables:
     chain: INPUT
-    flush: yes
+    flush: true
 
 - name: Allow loopback traffic
   ansible.builtin.iptables:
@@ -97,6 +97,6 @@
   when: ansible_os_family == 'Debian'
 
 - name: Save iptables rules (RedHat)
-  ansible.builtin.command: service iptables save
+  ansible.builtin.shell: iptables-save > /etc/sysconfig/iptables
   changed_when: false
   when: ansible_os_family == 'RedHat'

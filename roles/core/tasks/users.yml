@@ -1,7 +1,7 @@
 ---
 - name: Get all users
-  shell: "getent passwd | awk -F: '$3 > 999 {print $1}'"
-  register: users_in_vm
+  ansible.builtin.shell: "set -o pipefail && getent passwd | awk -F: '$3 > 999 {print $1}'"
+  register: core_users_in_vm
   check_mode: false
   changed_when: false
 
@@ -10,7 +10,7 @@
     name: "{{ item }}"
     state: absent
     remove: true
-  loop: "{{ users_in_vm.stdout_lines }}"
+  loop: "{{ core_users_in_vm.stdout_lines }}"
   when: >
     item != 'nobody' and
     item not in (core_users_whitelist | default([])) and
@@ -27,7 +27,7 @@
   ansible.builtin.user:
     name: "{{ item.name }}"
     state: present
-    create_home: yes
+    create_home: true
     shell: "{{ item.shell | default('/bin/bash') }}"
     groups: "{{ item.groups | default(omit) }}"
     append: "{{ item.append | default(false) }}"
@@ -48,8 +48,8 @@
       {{ item.ssh_key }}
       {% endif %}
     state: present
-    manage_dir: yes
-    exclusive: yes
+    manage_dir: true
+    exclusive: true
   loop: "{{ core_users }}"
   when: item.ssh_keys is defined or item.ssh_key is defined
   loop_control:
