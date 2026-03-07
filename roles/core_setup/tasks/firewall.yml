@@ -1,0 +1,102 @@
+---
+- name: Install iptables persistence (Debian)
+  ansible.builtin.apt:
+    name:
+      - iptables-persistent
+      - netfilter-persistent
+    state: present
+  when: ansible_os_family == 'Debian'
+
+- name: Install iptables persistence (RedHat)
+  ansible.builtin.package:
+    name: iptables-services
+    state: present
+  when: ansible_os_family == 'RedHat'
+
+- name: Set temporary default policy to ACCEPT
+  ansible.builtin.iptables:
+    chain: INPUT
+    policy: ACCEPT
+
+- name: Flush existing iptables rules
+  ansible.builtin.iptables:
+    chain: INPUT
+    flush: yes
+
+- name: Allow loopback traffic
+  ansible.builtin.iptables:
+    chain: INPUT
+    in_interface: lo
+    jump: ACCEPT
+
+- name: Allow established and related connections
+  ansible.builtin.iptables:
+    chain: INPUT
+    ctstate: ESTABLISHED,RELATED
+    comment: "Allow established and related connections"
+    jump: ACCEPT
+
+- name: Drop invalid packets
+  ansible.builtin.iptables:
+    chain: INPUT
+    ctstate: INVALID
+    comment: "Drop invalid packets"
+    jump: DROP
+  when: core_firewall_block_scans
+
+- name: Drop TCP null packets
+  ansible.builtin.iptables:
+    chain: INPUT
+    protocol: tcp
+    tcp_flags:
+      flags: [FIN, SYN, RST, PSH, ACK, URG]
+      flags_set: [NONE]
+    comment: "Drop TCP null packets"
+    jump: DROP
+  when: core_firewall_block_scans
+
+- name: Drop TCP Xmas packets
+  ansible.builtin.iptables:
+    chain: INPUT
+    protocol: tcp
+    tcp_flags:
+      flags: [FIN, SYN, RST, PSH, ACK, URG]
+      flags_set: [FIN, SYN, RST, PSH, ACK, URG]
+    comment: "Drop TCP Xmas packets"
+    jump: DROP
+  when: core_firewall_block_scans
+
+- name: Allow SSH traffic
+  ansible.builtin.iptables:
+    chain: INPUT
+    protocol: tcp
+    source: "{{ core_firewall_ssh_src }}"
+    destination_port: "{{ core_ssh_port }}"
+    comment: "Allow SSH management port"
+    jump: ACCEPT
+
+- name: Apply custom firewall rules
+  ansible.builtin.iptables:
+    chain: INPUT
+    protocol: "{{ item.proto | default('tcp') }}"
+    destination_port: "{{ item.port | default(omit) }}"
+    source: "{{ item.src | default('0.0.0.0/0') }}"
+    comment: "{{ item.comment | default('Managed by Ansible') }}"
+    jump: ACCEPT
+  loop: "{{ core_firewall_custom_rules }}"
+  when: item.port is not defined or (item.port | string) != (core_ssh_port | string)
+
+- name: Set default policy to target state
+  ansible.builtin.iptables:
+    chain: INPUT
+    policy: "{{ core_firewall_default_policy }}"
+
+- name: Save iptables rules (Debian)
+  ansible.builtin.command: netfilter-persistent save
+  changed_when: false
+  when: ansible_os_family == 'Debian'
+
+- name: Save iptables rules (RedHat)
+  ansible.builtin.command: service iptables save
+  changed_when: false
+  when: ansible_os_family == 'RedHat'

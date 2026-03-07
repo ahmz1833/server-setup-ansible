@@ -1,0 +1,69 @@
+---
+- name: Get all users
+  shell: "getent passwd | awk -F: '$3 > 999 {print $1}'"
+  register: users_in_vm
+  check_mode: false
+  changed_when: false
+
+- name: Remove unknown users
+  ansible.builtin.user:
+    name: "{{ item }}"
+    state: absent
+    remove: true
+  loop: "{{ users_in_vm.stdout_lines }}"
+  when: >
+    item != 'nobody' and
+    item not in (core_users_whitelist | default([])) and
+    item not in (core_users | map(attribute='name') | list)
+
+- name: Ensure user groups exist
+  ansible.builtin.group:
+    name: "{{ item.group }}"
+    state: present
+  loop: "{{ core_users }}"
+  when: item.group is defined
+
+- name: Create users
+  ansible.builtin.user:
+    name: "{{ item.name }}"
+    state: present
+    create_home: yes
+    shell: "{{ item.shell | default('/bin/bash') }}"
+    groups: "{{ item.groups | default(omit) }}"
+    append: "{{ item.append | default(false) }}"
+    password: "{{ item.password | default(omit) }}"
+    update_password: "{{ item.update_password | default('on_create') }}"
+  loop: "{{ core_users }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: Configure authorized keys
+  ansible.posix.authorized_key:
+    user: "{{ item.name }}"
+    key: |
+      {% for k in item.ssh_keys | default([]) %}
+      {{ lookup('file', k) }}
+      {% endfor %}
+      {% if item.ssh_key is defined %}
+      {{ item.ssh_key }}
+      {% endif %}
+    state: present
+    manage_dir: yes
+    exclusive: yes
+  loop: "{{ core_users }}"
+  when: item.ssh_keys is defined or item.ssh_key is defined
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: Configure sudo privileges
+  ansible.builtin.copy:
+    dest: "/etc/sudoers.d/{{ item.name }}"
+    content: "{{ item.name }} ALL=(ALL) {{ 'NOPASSWD:' if item.sudoer_no_pass | default(false) else '' }} ALL"
+    owner: root
+    group: root
+    mode: '0440'
+    validate: 'visudo -cf %s'
+  loop: "{{ core_users }}"
+  when: item.sudoer | default(false)
+  loop_control:
+    label: "{{ item.name }}"

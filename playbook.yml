@@ -1,0 +1,6 @@
+---
+- name: Provision Core Setup
+  hosts: all
+  become: yes
+  roles:
+    - role: core_setup

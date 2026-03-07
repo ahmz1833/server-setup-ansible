@@ -1,0 +1,48 @@
+---
+# High-level Meta Variables
+core_is_iran: false
+core_enable_ipv6: false
+
+# Timezone is automatically determined by 'core_is_iran' unless explicitly overridden
+core_timezone: "{{ 'Asia/Tehran' if core_is_iran else 'Etc/UTC' }}"
+
+core_hostname: "{{ inventory_hostname }}"
+
+core_packages:
+  - curl
+  - wget
+  - git
+  - tar
+  - htop
+  - ca-certificates
+  - net-tools
+  - vim
+  - iotop
+  - iftop
+
+core_manage_users: true
+core_users: []
+
+core_manage_ssh: true
+core_ssh_port: 22
+core_ssh_ensure_pub_key_user: "{{ core_primary_user | default(omit) }}"
+core_ssh_password_auth: false
+core_ssh_permit_root_login: false
+core_ssh_x11_forwarding: false
+core_ssh_port_forwarding: true
+core_ssh_max_auth_tries: 3
+core_ssh_login_grace_time: 30
+core_ssh_allow_users: []
+
+core_manage_firewall: true
+core_firewall_default_policy: "DROP"
+core_firewall_ssh_src: "0.0.0.0/0"
+core_firewall_block_scans: true
+core_firewall_custom_rules: []
+
+# Base sysctl settings (IPv6 is handled dynamically in tasks)
+core_sysctl:
+  net.ipv4.tcp_syncookies: 1
+  net.ipv4.conf.all.accept_source_route: 0
+
+core_fail2ban_enabled: true

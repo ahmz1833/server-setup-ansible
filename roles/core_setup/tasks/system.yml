@@ -1,0 +1,70 @@
+---
+- name: Set system timezone
+  community.general.timezone:
+    name: "{{ core_timezone }}"
+
+- name: Set system hostname
+  ansible.builtin.hostname:
+    name: "{{ core_hostname }}"
+
+- name: Add record to /etc/host for new hostname
+  lineinfile:
+    dest: /etc/hosts
+    regexp: '.*{{ inventory_hostname }}$'
+    line: "127.0.0.1 {{inventory_hostname}}"
+    state: present
+
+- name: Determine active APT mirror
+  ansible.builtin.set_fact:
+    active_apt_mirror: "{% if core_apt_mirror is defined and core_apt_mirror != '' %}{{ core_apt_mirror }}{% elif core_is_iran | default(false) %}http://mirror.arvancloud.ir/ubuntu{% endif %}"
+
+- name: Find core OS APT source files
+  ansible.builtin.find:
+    paths:
+      - /etc/apt/
+      - /etc/apt/sources.list.d/
+    patterns:
+      - "sources.list"
+      - "ubuntu.sources"
+      - "debian.sources"
+  register: core_apt_files
+  when:
+    - ansible_os_family == 'Debian'
+    - active_apt_mirror is defined
+    - active_apt_mirror | length > 0
+
+- name: Configure custom APT mirror (Legacy .list format)
+  ansible.builtin.replace:
+    path: "{{ item.path }}"
+    regexp: '^(deb(?:-src)?\s+)(?:https?://[^\s]+)(\s+.*)$'
+    replace: '\g<1>{{ active_apt_mirror }}\g<2>'
+  loop: "{{ core_apt_files.files | default([]) }}"
+  when:
+    - item.path.endswith('.list')
+    - ansible_os_family == 'Debian'
+    - active_apt_mirror is defined
+    - active_apt_mirror | length > 0
+
+- name: Configure custom APT mirror (Modern DEB822 .sources format)
+  ansible.builtin.replace:
+    path: "{{ item.path }}"
+    regexp: '^URIs:\s+https?://.*$'
+    replace: 'URIs: {{ active_apt_mirror }}'
+  loop: "{{ core_apt_files.files | default([]) }}"
+  when:
+    - item.path.endswith('.sources')
+    - ansible_os_family == 'Debian'
+    - active_apt_mirror is defined
+    - active_apt_mirror | length > 0
+
+- name: Update package cache (Debian)
+  ansible.builtin.apt:
+    update_cache: yes
+    cache_valid_time: 3600
+  when: ansible_os_family == 'Debian'
+
+- name: Install common packages
+  ansible.builtin.package:
+    name: "{{ core_packages }}"
+    state: present
+  when: core_packages | length > 0
