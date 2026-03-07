@@ -3,13 +3,13 @@
   ansible.builtin.systemd:
     name: sing-box
     state: restarted
-    daemon_reload: yes
+    daemon_reload: true
 
 - name: Restart gost
   ansible.builtin.systemd:
     name: gost
     state: restarted
-    daemon_reload: yes
+    daemon_reload: true
 
 - name: Restart nginx
   ansible.builtin.systemd:

@@ -1,0 +1,24 @@
+---
+- name: Node Services - Singbox Installation and Configuration
+  ansible.builtin.import_tasks: singbox.yml
+  tags:
+    - node-singbox
+  when: node_singbox_install
+
+- name: Node Services - Setup Tools and Bootstrap (Shell, Vim, ...)
+  ansible.builtin.import_tasks: tools.yml
+  tags:
+    - node-tools
+    - node-bootstrap
+
+- name: Node Services - Gost Installation and Configuration
+  ansible.builtin.import_tasks: gost.yml
+  tags:
+    - node-gost
+  when: node_gost_install
+
+- name: Node Services - Docker Installation
+  ansible.builtin.import_tasks: docker.yml
+  tags:
+    - node-docker
+  when: node_docker_enabled

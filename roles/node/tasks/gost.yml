@@ -1,7 +1,7 @@
 ---
 - name: Check if gost is installed
   ansible.builtin.command: gost -V
-  register: gost_check
+  register: node_gost_check
   ignore_errors: true
   changed_when: false
 
@@ -9,10 +9,11 @@
   ansible.builtin.get_url:
     url: "https://github.com/go-gost/gost/releases/download/v{{ node_gost_version }}/gost_{{ node_gost_version }}_linux_amd64.tar.gz"
     dest: "/tmp/gost-{{ node_gost_version }}-linux-amd64.tar.gz"
+    mode: '0644'
   delegate_to: localhost
   become: false
   run_once: true
-  when: gost_check.rc != 0
+  when: node_gost_check.rc != 0
 
 - name: Create temporary directory for gost extraction locally
   ansible.builtin.file:
@@ -22,17 +23,17 @@
   delegate_to: localhost
   become: false
   run_once: true
-  when: gost_check.rc != 0
+  when: node_gost_check.rc != 0
 
 - name: Extract gost archive locally
   ansible.builtin.unarchive:
     src: "/tmp/gost-{{ node_gost_version }}-linux-amd64.tar.gz"
     dest: "/tmp/gost-{{ node_gost_version }}"
-    remote_src: yes
+    remote_src: true
   delegate_to: localhost
   become: false
   run_once: true
-  when: gost_check.rc != 0
+  when: node_gost_check.rc != 0
 
 - name: Copy gost binary to target node
   ansible.builtin.copy:
@@ -66,4 +67,4 @@
     name: gost
     state: "{{ 'started' if node_gost_enabled | default(false) else 'stopped' }}"
     enabled: "{{ node_gost_enabled | default(false) }}"
-    daemon_reload: yes
+    daemon_reload: true

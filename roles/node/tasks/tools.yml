@@ -10,9 +10,9 @@
   ansible.builtin.shell: "set -o pipefail && curl -fsSL {{ node_bootstrap_script_url }} | bash -s -- --no-sudo"
   args:
     executable: /bin/bash
-  register: bootstrap_result
-  failed_when: bootstrap_result.rc not in [0, 10]
-  changed_when: bootstrap_result.rc == 0
+  register: node_bootstrap_result
+  failed_when: node_bootstrap_result.rc not in [0, 10]
+  changed_when: node_bootstrap_result.rc == 0
   when: node_bootstrap_enabled
 
 - name: Change default shell to zsh

@@ -1,7 +1,7 @@
 ---
 - name: Check if sing-box is installed
   ansible.builtin.command: sing-box version
-  register: singbox_check
+  register: node_singbox_check
   ignore_errors: true
   changed_when: false
 
@@ -9,27 +9,28 @@
   ansible.builtin.get_url:
     url: "https://github.com/SagerNet/sing-box/releases/download/v{{ node_singbox_version }}/sing-box-{{ node_singbox_version }}-linux-amd64.tar.gz"
     dest: "/tmp/sing-box-{{ node_singbox_version }}-linux-amd64.tar.gz"
+    mode: '0644'
   delegate_to: localhost
   become: false
   run_once: true
-  when: singbox_check.rc != 0
+  when: node_singbox_check.rc != 0
 
 - name: Extract sing-box archive locally
   ansible.builtin.unarchive:
     src: "/tmp/sing-box-{{ node_singbox_version }}-linux-amd64.tar.gz"
     dest: "/tmp/"
-    remote_src: yes
+    remote_src: true
   delegate_to: localhost
   become: false
   run_once: true
-  when: singbox_check.rc != 0
+  when: node_singbox_check.rc != 0
 
 - name: Copy sing-box binary to target node
   ansible.builtin.copy:
     src: "/tmp/sing-box-{{ node_singbox_version }}-linux-amd64/sing-box"
     dest: "/usr/local/bin/sing-box"
     mode: '0755'
-  when: singbox_check.rc != 0
+  when: node_singbox_check.rc != 0
 
 - name: Create sing-box config directory
   ansible.builtin.file:
@@ -56,7 +57,7 @@
     name: sing-box
     state: "{{ 'started' if node_singbox_enabled | default(false) else 'stopped' }}"
     enabled: "{{ node_singbox_enabled | default(false) }}"
-    daemon_reload: yes
+    daemon_reload: true
 
 - name: Force flush handlers to start tunnel immediately
   ansible.builtin.meta: flush_handlers

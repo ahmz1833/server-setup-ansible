@@ -1,7 +1,7 @@
 ---
 - name: Check if Docker is installed
   ansible.builtin.command: docker --version
-  register: docker_check
+  register: node_docker_check
   ignore_errors: true
   changed_when: false
   when: node_docker_enabled
@@ -13,19 +13,20 @@
     mode: '0755'
   when:
     - node_docker_enabled
-    - docker_check.rc != 0
+    - node_docker_check.rc != 0
 
 - name: Execute Docker installation script
   ansible.builtin.command: /tmp/get-docker.sh
   when:
     - node_docker_enabled
-    - docker_check.rc != 0
+    - node_docker_check.rc != 0
+  changed_when: true
 
 - name: Add primary user to docker group
   ansible.builtin.user:
     name: "{{ node_primary_user }}"
     groups: docker
-    append: yes
+    append: true
   when:
     - node_docker_enabled
     - node_primary_user is defined
@@ -34,5 +35,5 @@
   ansible.builtin.systemd:
     name: docker
     state: started
-    enabled: yes
+    enabled: true
   when: node_docker_enabled
