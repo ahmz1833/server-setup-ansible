@@ -4,38 +4,42 @@
   tags:
     - nginx-install
     - nginx-waf
+  when: nginx_managed
 
 - name: Configure WAF
   ansible.builtin.import_tasks: waf.yml
   tags:
     - nginx-waf
-  when: nginx_waf_install
+  when: nginx_managed and nginx_waf_install
 
 - name: Configure Nginx
   ansible.builtin.import_tasks: config.yml
   tags:
     - nginx-config
+  when: nginx_managed
 
 - name: Configure Metrics
   ansible.builtin.import_tasks: metrics.yml
   tags:
     - nginx-monitoring
-  when: nginx_exporter_install
+  when: nginx_managed and nginx_exporter_install
 
 - name: Configure Error Pages
   ansible.builtin.import_tasks: error_pages.yml
   tags:
     - nginx-error-pages
+  when: nginx_managed
 
 - name: Configure Sites
   ansible.builtin.import_tasks: sites.yml
   tags:
     - nginx-sites
     - nginx-error-pages
+  when: nginx_managed
 
 - name: Configure Promtail
   ansible.builtin.import_tasks: promtail.yml
   tags:
     - nginx-monitoring
     - nginx-promtail
-  when: nginx_promtail_install
+  when: nginx_managed and nginx_promtail_install
