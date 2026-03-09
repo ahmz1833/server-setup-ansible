@@ -135,6 +135,7 @@ server {
 {% if item.upstream is defined %}
     location / {
         set $endpoint_name "/";
+        proxy_intercept_errors {{ item.proxy_intercept_errors | default(nginx_proxy_intercept_errors) }};
         proxy_pass {{ item.upstream }};
         proxy_http_version 1.1;
         proxy_set_header Host $host;
@@ -156,6 +157,7 @@ server {
 {% endif %}
 
 {% if loc.upstream is defined %}
+        proxy_intercept_errors {{ loc.proxy_intercept_errors | default(item.proxy_intercept_errors | default(nginx_proxy_intercept_errors)) }};
         proxy_pass {{ loc.upstream }};
         proxy_http_version 1.1;
         proxy_set_header Host $host;
@@ -263,6 +265,7 @@ server {
 {% if item.upstream is defined %}
     location / {
         set $endpoint_name "/";
+        proxy_intercept_errors {{ item.proxy_intercept_errors | default(nginx_proxy_intercept_errors) }};
         proxy_pass {{ item.upstream }};
         proxy_http_version 1.1;
         proxy_set_header Host $host;
@@ -284,6 +287,7 @@ server {
 {% endif %}
 
 {% if loc.upstream is defined %}
+        proxy_intercept_errors {{ loc.proxy_intercept_errors | default(item.proxy_intercept_errors | default(nginx_proxy_intercept_errors)) }};
         proxy_pass {{ loc.upstream }};
         proxy_http_version 1.1;
         proxy_set_header Host $host;

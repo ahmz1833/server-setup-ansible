@@ -50,8 +50,12 @@ nginx_trusted_proxies:
   - "185.215.232.0/22"
   - "178.131.120.48/28"
 
-# Global Security Settings
+# Global Settings
 nginx_server_tokens: "off"
+nginx_proxy_intercept_errors: "off"
+nginx_hide_server_header: false
+
+# SSL/TLS Settings
 nginx_ssl_protocols: "TLSv1.2 TLSv1.3"
 nginx_ssl_cert_dir: "/etc/ssl/certs"
 nginx_ssl_ciphers: >-
@@ -69,6 +73,7 @@ nginx_header_x_xss_protection: "1; mode=block"
 nginx_header_referrer_policy: "strict-origin-when-cross-origin"
 nginx_header_permissions_policy: ""
 nginx_header_csp: ""
+
 
 nginx_waf_install: true
 nginx_waf_global_settings:

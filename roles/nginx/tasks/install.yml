@@ -3,6 +3,7 @@
   ansible.builtin.package:
     name:
       - nginx
+      - libnginx-mod-http-headers-more-filter
       - unzip
     state: present
 

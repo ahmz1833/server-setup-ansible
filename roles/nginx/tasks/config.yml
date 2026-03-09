@@ -68,6 +68,13 @@
     mode: '0644'
   notify: Reload nginx
 
+- name: Disable default server_tokens in nginx.conf
+  ansible.builtin.replace:
+    path: /etc/nginx/nginx.conf
+    regexp: '^\s*server_tokens\s+.*;'
+    replace: '# server_tokens off;'
+  notify: Reload nginx
+
 - name: Configure Nginx logrotate
   ansible.builtin.template:
     src: logrotate.j2
