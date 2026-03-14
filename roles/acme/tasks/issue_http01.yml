@@ -22,6 +22,8 @@
         lsof -t -i:80 -sTCP:LISTEN 2>/dev/null | head -n 1 ||
         ss -tlpn 2>/dev/null | grep -E ':(80|http)[ \t]' | grep -Eo 'pid=[0-9]+' | cut -d= -f2 | head -n 1 ||
         fuser 80/tcp 2>/dev/null | awk '{print $1}' | head -n 1
+      args:
+        executable: /bin/bash
       register: acme_port80_pid
       changed_when: false
       failed_when: false
@@ -109,6 +111,8 @@
           cat /tmp/acme_python.log >&2
           exit 1
         fi
+      args:
+        executable: /bin/bash
       register: acme_standalone_pid
       changed_when: false
       become: true
