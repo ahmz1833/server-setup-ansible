@@ -7,39 +7,36 @@
     state: present
 
 - name: Check if node_exporter is installed
-  ansible.builtin.command: node_exporter --version
+  ansible.builtin.command: which node_exporter
   register: node_exporter_check
   ignore_errors: true
   changed_when: false
 
-- name: Download node_exporter archive locally
-  ansible.builtin.get_url:
-    url: https://github.com/prometheus/node_exporter/releases/download/v{{ node_exporter_version }}/node_exporter-{{ node_exporter_version }}.linux-amd64.tar.gz
-    dest: "/tmp/node_exporter-{{ node_exporter_version }}-linux-amd64.tar.gz"
-    mode: '0644'
-  delegate_to: localhost
-  run_once: true
-  become: false
-  when: node_exporter_check.rc != 0
+- name: Set node_exporter binary path
+  ansible.builtin.set_fact:
+    node_exporter_bin_path: "{{ node_exporter_check.stdout | default('/usr/local/bin/node_exporter', true) }}"
 
-- name: Extract node_exporter archive locally
-  ansible.builtin.unarchive:
-    src: "/tmp/node_exporter-{{ node_exporter_version }}-linux-amd64.tar.gz"
-    dest: "/tmp/"
-    remote_src: true
-  delegate_to: localhost
-  run_once: true
-  become: false
+- name: Download and extract node_exporter archive
   when: node_exporter_check.rc != 0
+  block:
+    - name: Download and extract node_exporter archive
+      ansible.builtin.unarchive:
+        src: "{{ 'https://github.com/prometheus/node_exporter/releases/download/v' ~ node_exporter_version ~
+                  '/node_exporter-' ~ node_exporter_version ~ '.linux-amd64.tar.gz' }}"
+        dest: "/tmp/"
+        remote_src: true
+      delegate_to: "{{ 'localhost' if node_download_locally | default(false) else inventory_hostname }}"
+      run_once: "{{ node_download_locally | default(false) }}"
+      become: "{{ not (node_download_locally | default(false)) }}"
 
-- name: Copy node_exporter binary to target node
-  ansible.builtin.copy:
-    src: "/tmp/node_exporter-{{ node_exporter_version }}.linux-amd64/node_exporter"
-    dest: "/usr/local/bin/node_exporter"
-    mode: '0755'
-    owner: root
-    group: root
-  when: node_exporter_check.rc != 0
+    - name: Copy node_exporter binary to target node
+      ansible.builtin.copy:
+        src: "/tmp/node_exporter-{{ node_exporter_version }}.linux-amd64/node_exporter"
+        dest: "/usr/local/bin/node_exporter"
+        mode: '0755'
+        owner: root
+        group: root
+        remote_src: "{{ not (node_download_locally | default(false)) }}"
 
 - name: Configure node_exporter systemd service
   ansible.builtin.template:

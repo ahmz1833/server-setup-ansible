@@ -12,7 +12,7 @@
         "query_type": "A",
         "rcode": "NOERROR"
       },
-      {% if core_enable_ipv6 | default(false) %}
+      {% if node_enable_ipv6 | default(false) %}
       {
         "action": "predefined",
         "answer": "localhost. IN AAAA ::1",
@@ -23,7 +23,7 @@
       {% endif %}
       {
         "action": "route",
-        "query_type": ["A"{% if core_enable_ipv6 | default(false) %}, "AAAA"{% endif %}],
+        "query_type": ["A"{% if node_enable_ipv6 | default(false) %}, "AAAA"{% endif %}],
         "server": "dns-fake"
       },
       {
@@ -51,7 +51,7 @@
       },
       {
         "inet4_range": "198.18.0.0/15",
-        {% if core_enable_ipv6 | default(false) %}
+        {% if node_enable_ipv6 | default(false) %}
         "inet6_range": "fc00::/18",
         {% endif %}
         "tag": "dns-fake",
@@ -87,7 +87,7 @@
     {
       "address": [
         "172.19.0.1/24"
-        {% if core_enable_ipv6 | default(false) %}
+        {% if node_enable_ipv6 | default(false) %}
         , "fdfe:dcba:9876::1/96"
         {% endif %}
       ],

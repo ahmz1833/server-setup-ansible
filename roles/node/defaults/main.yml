@@ -1,5 +1,9 @@
 ---
-node_primary_user: "{{ core_primary_user | default('root') }}"
+# Global vars
+node_primary_user: '{{ primary_user | default("root") }}'
+node_download_locally: '{{ download_locally | default(false) }}'
+node_internet_problem: '{{ is_iran | default(false) }}'
+node_enable_ipv6: '{{ enable_ipv6 | default(false) }}'
 
 node_tools_packages:
   - zsh
@@ -20,9 +24,11 @@ node_tools_packages:
 
 # URL for custom dotfiles/shell setup script
 node_bootstrap_enabled: true
-node_bootstrap_script_url: "https://s3.ahmz.ir/dots/bootstrap.sh"
+node_bootstrap_script_url: "{{ node_internet_problem | default(false) |
+  ternary('https://s3.ahmz.ir/dots/bootstrap.sh',
+  'https://raw.githubusercontent.com/ahmz1833/dots/main/bootstrap.sh') }}"
 
-node_singbox_install: "{{ core_is_iran }}"
+node_singbox_install: "{{ node_internet_problem }}"
 node_singbox_enabled: false
 node_singbox_version: "1.13.1"
 node_singbox_outbound:
@@ -37,6 +43,17 @@ node_gost_version: "3.2.6"
 node_gost_config: {}
 
 node_docker_enabled: true
+node_docker_bip: "172.29.0.1/16"
+node_docker_default_address_pools:
+  - base: "172.30.0.0/16"
+    size: 24
+node_docker_log_driver: "json-file"
+node_docker_log_opts:
+  max-size: "50m"
+  max-file: "3"
+node_docker_live_restore: true
+node_docker_metrics_enabled: true
+node_docker_metrics_addr: "127.0.0.1:9323"
 
 node_exporter_install: true
 node_exporter_enabled: false

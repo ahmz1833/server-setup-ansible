@@ -19,3 +19,10 @@
     state: restarted
     daemon_reload: true
   when: node_exporter_enabled
+
+- name: Restart docker
+  ansible.builtin.systemd:
+    name: docker
+    state: restarted
+    daemon_reload: true
+  when: node_docker_enabled
