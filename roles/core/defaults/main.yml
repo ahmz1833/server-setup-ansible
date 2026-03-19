@@ -1,20 +1,29 @@
 ---
-# High-level Meta Variables
+# Meta Variables (inherited from playbook-level)
 core_is_iran: '{{ is_iran | default(false) }}'
 core_enable_ipv6: '{{ enable_ipv6 | default(false) }}'
 core_download_locally: '{{ download_locally | default(false) }}'
 core_primary_user: '{{ primary_user | default("root") }}'
 
+# -----------------------------------------------------------------------------
+# System Configuration
+# -----------------------------------------------------------------------------
 # Timezone is automatically determined by 'core_is_iran' unless explicitly overridden
 core_timezone: "{{ 'Asia/Tehran' if core_is_iran else 'Etc/UTC' }}"
-
 core_hostname: "{{ inventory_hostname }}"
 
+# APT mirror (empty = use default, or set explicitly)
+# Auto-selects ArvanCloud mirror for Iran
+core_apt_mirror: ""
+
+# Base packages to install on all systems
 core_packages:
   - curl
   - wget
   - git
   - tar
+  - unzip
+  - jq
   - htop
   - ca-certificates
   - net-tools
@@ -23,10 +32,37 @@ core_packages:
   - iotop
   - iftop
 
+# Additional packages (role consumer can extend)
+core_extra_packages: []
+
+# -----------------------------------------------------------------------------
+# User Management
+# -----------------------------------------------------------------------------
 core_manage_users: true
+
+# Users List
+# Example:
+# core_users:
+#   - name: admin
+#     password: '<Hash made by mkpasswd>' # if provided, password will be updated. Must be provided when creating.
+#     groups: ["sudo", "docker"]
+#     append: <true/false>                # Default: true (if true, do not remove user from already joined groups)
+#     shell: /bin/bash
+#     ssh_keys:
+#       - "~/.ssh/deploy_key.pub"
+#     sudoer: true                        # add special sudoer (not relate to sudo group)
+#     sudoer_no_pass: true                # (requires special sudoer be true)
 core_users: []
 
+# Usernames to never remove (protection list)
+core_users_whitelist: []
+
+# -----------------------------------------------------------------------------
+# SSH Configuration
+# -----------------------------------------------------------------------------
 core_manage_ssh: true
+
+# SSH port detection: inventory > ssh config > default 22
 core_ssh_port: >-
   {{
     ansible_facts['port'] | default(ansible_facts['ssh_port'] | default(
@@ -34,24 +70,153 @@ core_ssh_port: >-
       true
     )) | int
   }}
+
+# User to verify has SSH keys before disabling password auth
 core_ssh_ensure_pub_key_user: "{{ core_primary_user | default(omit) }}"
+
+# SSH hardening options
 core_ssh_password_auth: false
 core_ssh_permit_root_login: false
 core_ssh_x11_forwarding: false
 core_ssh_port_forwarding: true
 core_ssh_max_auth_tries: 3
 core_ssh_login_grace_time: 30
+
+# Restrict SSH to specific users (empty = no restriction)
 core_ssh_allow_users: []
 
+# -----------------------------------------------------------------------------
+# Sysctl / Kernel Tuning
+# -----------------------------------------------------------------------------
+core_manage_sysctl: true
+
+# Base sysctl settings
+core_sysctl_base:
+  # Security
+  net.ipv4.tcp_syncookies: 1
+  net.ipv4.conf.all.accept_source_route: 0
+  net.ipv4.conf.default.accept_source_route: 0
+  net.ipv4.conf.all.accept_redirects: 0
+  net.ipv4.conf.default.accept_redirects: 0
+  net.ipv4.conf.all.secure_redirects: 0
+  net.ipv4.conf.default.secure_redirects: 0
+  net.ipv4.conf.all.send_redirects: 0
+  net.ipv4.conf.default.send_redirects: 0
+  net.ipv4.icmp_echo_ignore_broadcasts: 1
+  net.ipv4.icmp_ignore_bogus_error_responses: 1
+  net.ipv4.conf.all.rp_filter: 1
+  net.ipv4.conf.default.rp_filter: 1
+  net.ipv4.conf.all.log_martians: 1
+  # Performance
+  net.core.somaxconn: 65535
+  net.core.netdev_max_backlog: 65535
+  net.ipv4.tcp_max_syn_backlog: 65535
+  net.ipv4.tcp_fin_timeout: 15
+  net.ipv4.tcp_keepalive_time: 300
+  net.ipv4.tcp_keepalive_probes: 5
+  net.ipv4.tcp_keepalive_intvl: 15
+
+# Additional sysctl settings (merged with base)
+core_sysctl_extra: {}
+
+# Enable IP forwarding (required for NAT/routing)
+core_sysctl_ip_forward: false
+
+# -----------------------------------------------------------------------------
+# IPSet Configuration
+# -----------------------------------------------------------------------------
+core_manage_ipset: true
+core_ipset_data_dir: "/var/lib/ipset"
+
+# Example:
+# core_ipsets:
+#   - name: cloudflare-v4
+#     type: hash:net
+#     family: inet
+#     entries:
+#       - "173.245.48.0/20"
+#       - "103.21.244.0/22"
+#
+#   - name: cloudflare-v4
+#     type: hash:net
+#     family: inet
+#     url: "https://www.cloudflare.com/ips-v4"
+#     cron: "0 4 * * *"
+core_ipsets: []
+
+# -----------------------------------------------------------------------------
+# Firewall Configuration (INPUT chain only)
+# -----------------------------------------------------------------------------
 core_manage_firewall: true
 core_firewall_default_policy: "DROP"
 core_firewall_ssh_src: "0.0.0.0/0"
+core_firewall_ssh_src_v6: "::/0"
 core_firewall_block_scans: true
-core_firewall_custom_rules: []
+core_firewall_allow_ping: true
 
-# Base sysctl settings (IPv6 is handled dynamically in tasks)
-core_sysctl:
-  net.ipv4.tcp_syncookies: 1
-  net.ipv4.conf.all.accept_source_route: 0
+# Example:
+# core_firewall_rules:
+#   - { port: 80, comment: "HTTP" }
+#   - { port: 443, comment: "HTTPS" }
+#   - { port: 9100, src: "10.0.0.0/8", comment: "Metrics" }
+#   - { port: 8080, ipset: "trusted-nets", comment: "From trusted" }
+#   - { port: 3000, v4_only: true, comment: "IPv4 only" }
+core_firewall_rules: []
 
+# -----------------------------------------------------------------------------
+# Fail2ban Configuration
+# -----------------------------------------------------------------------------
 core_fail2ban_enabled: true
+
+# Global fail2ban settings
+core_fail2ban_bantime: 3600
+core_fail2ban_findtime: 600
+core_fail2ban_maxretry: 5
+
+# Ignored IPs (never ban)
+core_fail2ban_ignoreip:
+  - "127.0.0.1/8"
+  - "::1"
+
+# SSH fail2ban settings
+core_fail2ban_ssh_maxretry: 3
+
+# Additional jails
+# Example:
+# core_fail2ban_extra_jails:
+#   nginx-http-auth:
+#     enabled: true
+#     filter: nginx-http-auth
+#     logpath: /var/log/nginx/error.log
+#     maxretry: 3
+core_fail2ban_extra_jails: {}
+
+# -----------------------------------------------------------------------------
+# Cron Management
+# -----------------------------------------------------------------------------
+core_manage_cron: true
+
+# Exclusive mode: remove cron jobs with our prefix that aren't in our list
+core_cron_exclusive: true
+core_cron_prefix: "ansible-"  # All managed crons will have this prefix
+
+# User-defined cron jobs
+# Example:
+# core_cron_jobs:
+#   - name: "backup-daily"
+#     job: "/opt/scripts/backup.sh"
+#     hour: "3"
+#     minute: "0"
+#
+#   - name: "cleanup-temp"
+#     job: "find /tmp -type f -mtime +7 -delete"
+#     special_time: daily
+#
+#   - name: "disabled-job"
+#     job: "/some/script.sh"
+#     disabled: true
+core_cron_jobs: []
+
+# Auto-generate cron jobs for IPSet URL updates
+# When true, ipsets with 'url' and 'cron' will automatically get cron jobs
+core_cron_auto_ipset: true

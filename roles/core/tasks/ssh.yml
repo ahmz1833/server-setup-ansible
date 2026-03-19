@@ -1,4 +1,5 @@
 ---
+# Safety check: Verify SSH keys exist before disabling password auth
 - name: Verify authorized keys for configured user
   ansible.builtin.shell: |
     set -o pipefail
@@ -6,28 +7,29 @@
     if ! getent passwd "$target_user" >/dev/null; then exit 3; fi
     user_home=$(getent passwd "$target_user" | cut -d: -f6)
     if [ ! -f "$user_home/.ssh/authorized_keys" ]; then exit 2; fi
-    grep -q 'ssh-' "$user_home/.ssh/authorized_keys"
+    grep -qE '^(ssh-|ecdsa-|sk-)' "$user_home/.ssh/authorized_keys"
   args:
     executable: /bin/bash
   register: core_pubkey_check
   ignore_errors: true
   changed_when: false
-  when: >
-    (not core_ssh_password_auth) and
-    core_ssh_ensure_pub_key_user | length > 0
+  become: true
+  when:
+    - not core_ssh_password_auth
+    - core_ssh_ensure_pub_key_user | length > 0
 
 - name: Abort on public key verification failure
   ansible.builtin.fail:
-    msg: "Validation failed for user {{ core_ssh_ensure_pub_key_user }}. Cannot disable password authentication safely."
-  when: >
-    (not core_ssh_password_auth) and
-    core_ssh_ensure_pub_key_user | length > 0 and
-    core_pubkey_check.rc != 0
+    msg: "No valid SSH keys for user {{ core_ssh_ensure_pub_key_user }}. Cannot disable password auth safely."
+  when:
+    - not core_ssh_password_auth
+    - core_ssh_ensure_pub_key_user | length > 0
+    - core_pubkey_check.rc != 0
 
 - name: Verify a non-root user exists
   ansible.builtin.shell: |
     set -o pipefail
-    getent passwd | awk -F: '$3 >= 1000 && $7 !~ /nologin|false/ {print $1}' | grep -v nobody | wc -l
+    getent passwd | awk -F: '$3 >= 1000 && $7 !~ /nologin|false/ {print $1}' | grep -cv '^nobody$'
   args:
     executable: /bin/bash
   register: core_user_count_check
@@ -36,10 +38,18 @@
 
 - name: Abort on missing non-root user
   ansible.builtin.fail:
-    msg: "No standard non-root users found. Cannot disable root login safely."
-  when: >
-    (not core_ssh_permit_root_login) and
-    core_user_count_check.stdout | int == 0
+    msg: "No non-root users found. Cannot disable root login safely."
+  when:
+    - not core_ssh_permit_root_login
+    - core_user_count_check.stdout | default('0') | int == 0
+
+- name: Verify AllowUsers includes accessible user
+  ansible.builtin.fail:
+    msg: "AllowUsers ({{ core_ssh_allow_users | join(', ') }}) does not include {{ core_ssh_ensure_pub_key_user }}. This would cause lockout!"
+  when:
+    - core_ssh_allow_users | length > 0
+    - core_ssh_ensure_pub_key_user | length > 0
+    - core_ssh_ensure_pub_key_user not in core_ssh_allow_users
 
 - name: Find extra SSH configuration files
   ansible.builtin.find:
@@ -82,5 +92,15 @@
     path: /etc/ssh/sshd_config
     regexp: '^\s*#?\s*AllowUsers\s+'
     line: "AllowUsers {{ core_ssh_allow_users | join(' ') }}"
+    validate: sshd -t -f %s
   when: core_ssh_allow_users | length > 0
+  notify: Restart sshd
+
+- name: Remove AllowUsers if not configured
+  ansible.builtin.lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: '^\s*AllowUsers\s+'
+    state: absent
+    validate: sshd -t -f %s
+  when: core_ssh_allow_users | length == 0
   notify: Restart sshd

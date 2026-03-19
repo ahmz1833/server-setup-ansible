@@ -1,0 +1,59 @@
+---
+- name: Ensure ipset package is installed
+  ansible.builtin.package:
+    name: ipset
+    state: present
+
+- name: Create ipset data directory
+  ansible.builtin.file:
+    path: "{{ core_ipset_data_dir }}"
+    state: directory
+    mode: '0755'
+
+# Create all ipsets
+- name: Create ipsets
+  ansible.builtin.command:
+    cmd: >-
+      ipset create {{ item.name }} {{ item.type | default('hash:net') }}
+      family {{ item.family | default('inet') }} -exist
+  loop: "{{ core_ipsets }}"
+  loop_control:
+    label: "{{ item.name }}"
+  changed_when: false
+
+# Populate static entries
+- name: Flush and populate static ipsets
+  ansible.builtin.shell: |
+    ipset flush {{ item.name }}
+    {% for entry in item.entries %}
+    ipset add {{ item.name }} {{ entry }} -exist
+    {% endfor %}
+    ipset save {{ item.name }} > {{ core_ipset_data_dir }}/{{ item.name }}.save
+  loop: "{{ core_ipsets | selectattr('entries', 'defined') | list }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when: item.url is not defined
+  changed_when: false
+
+# Deploy update script for URL-based ipsets
+- name: Deploy ipset update script
+  ansible.builtin.template:
+    src: ipset-update.sh.j2
+    dest: "{{ core_ipset_data_dir }}/update-{{ item.name }}.sh"
+    mode: '0755'
+    user: root
+    group: root
+  loop: "{{ core_ipsets | selectattr('url', 'defined') | list }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+# Initial update for URL-based ipsets
+- name: Run ipset update for URL-based ipsets
+  ansible.builtin.command: "{{ core_ipset_data_dir }}/update-{{ item.name }}.sh"
+  loop: "{{ core_ipsets | selectattr('url', 'defined') | list }}"
+  loop_control:
+    label: "{{ item.name }}"
+  changed_when: false
+
+# NOTE: Cron jobs for ipset updates are handled centrally in cron.yml
+# This task does NOT create any cron jobs directly

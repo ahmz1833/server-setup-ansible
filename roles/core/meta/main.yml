@@ -3,9 +3,11 @@ galaxy_info:
   role_name: core
   author: AHMZ
   description: >-
-    Core server hardening — timezone, hostname, APT mirrors, package
-    installation, user management, SSH hardening, iptables firewall,
-    sysctl tuning, and fail2ban.
+    Core server provisioning and hardening — hostname, timezone, APT mirrors,
+    package installation, user management, SSH hardening, sysctl kernel tuning,
+    ipset management, iptables INPUT chain firewall, fail2ban intrusion prevention,
+    and centralized cron management.
+  license: MIT
   min_ansible_version: "2.14"
   platforms:
     - name: Ubuntu
@@ -23,11 +25,15 @@ galaxy_info:
         - "9"
   galaxy_tags:
     - system
+    - security
     - hardening
     - firewall
+    - iptables
+    - ipset
     - ssh
     - sysctl
     - fail2ban
     - users
+    - cron
 
 dependencies: []

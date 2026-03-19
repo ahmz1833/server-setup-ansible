@@ -1,0 +1,83 @@
+---
+- name: Initialize cron jobs list
+  ansible.builtin.set_fact:
+    _core_cron_all_jobs: "{{ core_cron_jobs | default([]) }}"
+
+# -----------------------------------------------------------------------------
+# Auto-generate ipset update crons
+# -----------------------------------------------------------------------------
+- name: Add ipset update cron jobs
+  ansible.builtin.set_fact:
+    _core_cron_all_jobs: >-
+      {{ _core_cron_all_jobs + [{
+        'name': 'ipset-update-' ~ item.name,
+        'job': core_ipset_data_dir ~ '/update-' ~ item.name ~ '.sh >/dev/null 2>&1',
+        'minute': (item.cron | default('0 4 * * *')).split()[0],
+        'hour': (item.cron | default('0 4 * * *')).split()[1],
+        'day': (item.cron | default('0 4 * * *')).split()[2],
+        'month': (item.cron | default('0 4 * * *')).split()[3],
+        'weekday': (item.cron | default('0 4 * * *')).split()[4]
+      }] }}
+  loop: "{{ core_ipsets | selectattr('url', 'defined') | selectattr('cron', 'defined') | list }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when: core_cron_auto_ipset | default(true)
+
+- name: Add ipset restore cron job
+  ansible.builtin.set_fact:
+    _core_cron_all_jobs: >-
+      {{ _core_cron_all_jobs + [{
+        'name': 'ipset-restore',
+        'job': 'for f in ' ~ core_ipset_data_dir ~ '/*.save; do [ -f "$f" ] && ipset restore -exist < "$f"; done',
+        'special_time': 'reboot'
+      }] }}
+  when:
+    - core_manage_ipset | default(true)
+    - core_ipsets | length > 0
+
+# -----------------------------------------------------------------------------
+# Exclusive mode: Find and remove stale cron jobs
+# -----------------------------------------------------------------------------
+- name: Get existing cron jobs with our prefix
+  ansible.builtin.shell: |
+    set -euo pipefail
+    crontab -l 2>/dev/null | grep -E '^#.*{{ core_cron_prefix }}' | sed 's/^# //' || true
+  register: _core_cron_existing
+  changed_when: false
+  when: core_cron_exclusive | default(true)
+
+- name: Build list of expected cron names
+  ansible.builtin.set_fact:
+    _core_cron_expected_names: "{{ _core_cron_all_jobs | map(attribute='name') | map('regex_replace', '^', core_cron_prefix) | list }}"
+  when: core_cron_exclusive | default(true)
+
+- name: Remove stale cron jobs
+  ansible.builtin.cron:
+    name: "{{ core_cron_prefix }}{{ item }}"
+    state: absent
+    user: root
+  loop: "{{ _core_cron_existing.stdout_lines | default([]) | map('regex_replace', '^' ~ core_cron_prefix, '') | list }}"
+  when:
+    - core_cron_exclusive | default(true)
+    - (core_cron_prefix ~ item) not in _core_cron_expected_names
+
+# -----------------------------------------------------------------------------
+# Apply all cron jobs
+# -----------------------------------------------------------------------------
+- name: Manage cron jobs
+  ansible.builtin.cron:
+    name: "{{ core_cron_prefix }}{{ item.name }}"
+    job: "{{ item.job }}"
+    user: "{{ item.user | default('root') }}"
+    minute: "{{ item.minute | default('*') }}"
+    hour: "{{ item.hour | default('*') }}"
+    day: "{{ item.day | default('*') }}"
+    month: "{{ item.month | default('*') }}"
+    weekday: "{{ item.weekday | default('*') }}"
+    special_time: "{{ item.special_time | default(omit) }}"
+    state: "{{ item.state | default('present') }}"
+    disabled: "{{ item.disabled | default(false) }}"
+  loop: "{{ _core_cron_all_jobs }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when: _core_cron_all_jobs | length > 0

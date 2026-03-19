@@ -1,3 +1,4 @@
+# core/tasks/firewall.yml
 ---
 - name: Install iptables persistence (Debian)
   ansible.builtin.apt:
@@ -13,90 +14,197 @@
     state: present
   when: ansible_facts['os_family'] == 'RedHat'
 
-- name: Set temporary default policy to ACCEPT
+# =============================================================================
+# IPv4 INPUT Chain
+# =============================================================================
+- name: "IPv4: Set temporary ACCEPT policy"
   ansible.builtin.iptables:
     chain: INPUT
     policy: ACCEPT
 
-- name: Flush existing iptables rules
+- name: "IPv4: Flush INPUT chain"
   ansible.builtin.iptables:
     chain: INPUT
     flush: true
 
-- name: Allow loopback traffic
+- name: "IPv4: Allow loopback"
   ansible.builtin.iptables:
     chain: INPUT
     in_interface: lo
     jump: ACCEPT
+    comment: "loopback"
 
-- name: Allow established and related connections
+- name: "IPv4: Allow established connections"
   ansible.builtin.iptables:
     chain: INPUT
     ctstate: ESTABLISHED,RELATED
-    comment: "Allow established and related connections"
     jump: ACCEPT
+    comment: "established"
 
-- name: Drop invalid packets
+- name: "IPv4: Drop invalid packets"
   ansible.builtin.iptables:
     chain: INPUT
     ctstate: INVALID
-    comment: "Drop invalid packets"
     jump: DROP
+    comment: "invalid"
   when: core_firewall_block_scans
 
-- name: Drop TCP null packets
+- name: "IPv4: Drop TCP scan packets"
   ansible.builtin.iptables:
     chain: INPUT
     protocol: tcp
     tcp_flags:
-      flags: [FIN, SYN, RST, PSH, ACK, URG]
-      flags_set: [NONE]
-    comment: "Drop TCP null packets"
+      flags: "{{ item.flags }}"
+      flags_set: "{{ item.set }}"
     jump: DROP
+    comment: "{{ item.comment }}"
+  loop:
+    - { flags: [FIN, SYN, RST, PSH, ACK, URG], set: [NONE], comment: "tcp-null" }
+    - { flags: [FIN, SYN, RST, PSH, ACK, URG], set: [FIN, SYN, RST, PSH, ACK, URG], comment: "tcp-xmas" }
+    - { flags: [SYN, FIN], set: [SYN, FIN], comment: "syn-fin" }
   when: core_firewall_block_scans
 
-- name: Drop TCP Xmas packets
+- name: "IPv4: Allow ICMP ping"
   ansible.builtin.iptables:
     chain: INPUT
-    protocol: tcp
-    tcp_flags:
-      flags: [FIN, SYN, RST, PSH, ACK, URG]
-      flags_set: [FIN, SYN, RST, PSH, ACK, URG]
-    comment: "Drop TCP Xmas packets"
-    jump: DROP
-  when: core_firewall_block_scans
-
-- name: Allow SSH traffic
-  ansible.builtin.iptables:
-    chain: INPUT
-    protocol: tcp
-    source: "{{ core_firewall_ssh_src }}"
-    destination_port: "{{ core_ssh_port }}"
-    comment: "Allow SSH management port"
+    protocol: icmp
+    icmp_type: echo-request
+    limit: 5/second
+    limit_burst: 10
     jump: ACCEPT
+    comment: "ping"
+  when: core_firewall_allow_ping
+  become: true
 
-- name: Apply custom firewall rules
+- name: "IPv4: Allow SSH"
+  ansible.builtin.iptables:
+    chain: INPUT
+    protocol: tcp
+    destination_port: "{{ core_ssh_port }}"
+    source: "{{ core_firewall_ssh_src }}"
+    jump: ACCEPT
+    comment: "ssh"
+
+- name: "IPv4: Apply custom rules"
   ansible.builtin.iptables:
     chain: INPUT
     protocol: "{{ item.proto | default('tcp') }}"
     destination_port: "{{ item.port | default(omit) }}"
     source: "{{ item.src | default('0.0.0.0/0') }}"
-    comment: "{{ item.comment | default('Managed by Ansible') }}"
     jump: ACCEPT
-  loop: "{{ core_firewall_custom_rules }}"
-  when: item.port is not defined or (item.port | string) != (core_ssh_port | string)
+    comment: "{{ item.comment | default('custom') }}"
+  loop: "{{ core_firewall_rules | rejectattr('ipset', 'defined') | rejectattr('v6_only', 'defined') | list }}"
+  when: (item.port | string) != (core_ssh_port | string)
 
-- name: Set default policy to target state
+- name: "IPv4: Apply ipset-based rules"
+  ansible.builtin.iptables:
+    chain: INPUT
+    protocol: "{{ item.proto | default('tcp') }}"
+    destination_port: "{{ item.port | default(omit) }}"
+    match_set: "{{ item.ipset }}"
+    match_set_flags: src
+    jump: ACCEPT
+    comment: "{{ item.comment | default(item.ipset) }}"
+  loop: "{{ core_firewall_rules | selectattr('ipset', 'defined') | rejectattr('v6_only', 'defined') | list }}"
+
+- name: "IPv4: Set default INPUT policy"
   ansible.builtin.iptables:
     chain: INPUT
     policy: "{{ core_firewall_default_policy }}"
 
+# =============================================================================
+# IPv6 INPUT Chain (when enabled)
+# =============================================================================
+- name: Configure IPv6 firewall
+  when: core_enable_ipv6
+  become: true
+  block:
+    - name: "IPv6: Set temporary ACCEPT policy"
+      ansible.builtin.iptables:
+        chain: INPUT
+        policy: ACCEPT
+        ip_version: ipv6
+
+    - name: "IPv6: Flush INPUT chain"
+      ansible.builtin.iptables:
+        chain: INPUT
+        flush: true
+        ip_version: ipv6
+
+    - name: "IPv6: Allow loopback"
+      ansible.builtin.iptables:
+        chain: INPUT
+        in_interface: lo
+        jump: ACCEPT
+        ip_version: ipv6
+        comment: "loopback"
+
+    - name: "IPv6: Allow established connections"
+      ansible.builtin.iptables:
+        chain: INPUT
+        ctstate: ESTABLISHED,RELATED
+        jump: ACCEPT
+        ip_version: ipv6
+        comment: "established"
+
+    - name: "IPv6: Allow essential ICMPv6"
+      ansible.builtin.iptables:
+        chain: INPUT
+        protocol: ipv6-icmp
+        jump: ACCEPT
+        ip_version: ipv6
+        comment: "icmpv6"
+
+    - name: "IPv6: Allow SSH"
+      ansible.builtin.iptables:
+        chain: INPUT
+        protocol: tcp
+        destination_port: "{{ core_ssh_port }}"
+        source: "{{ core_firewall_ssh_src_v6 }}"
+        jump: ACCEPT
+        ip_version: ipv6
+        comment: "ssh"
+
+    - name: "IPv6: Apply custom rules"
+      ansible.builtin.iptables:
+        chain: INPUT
+        protocol: "{{ item.proto | default('tcp') }}"
+        destination_port: "{{ item.port }}"
+        source: "{{ item.src_v6 | default('::/0') }}"
+        jump: ACCEPT
+        ip_version: ipv6
+        comment: "{{ item.comment | default('custom') }}"
+      loop: "{{ core_firewall_rules | rejectattr('ipset', 'defined') | rejectattr('v4_only', 'defined') | list }}"
+      when:
+        - (item.port | string) != (core_ssh_port | string)
+        - item.src is not defined or item.src_v6 is defined
+
+    - name: "IPv6: Set default INPUT policy"
+      ansible.builtin.iptables:
+        chain: INPUT
+        policy: "{{ core_firewall_default_policy }}"
+        ip_version: ipv6
+
+# =============================================================================
+# Save ALL rules (all tables, all chains)
+# =============================================================================
 - name: Save iptables rules (Debian)
   ansible.builtin.command: netfilter-persistent save
   changed_when: false
   when: ansible_facts['os_family'] == 'Debian'
 
 - name: Save iptables rules (RedHat)
-  ansible.builtin.shell: iptables-save > /etc/sysconfig/iptables
+  ansible.builtin.shell: |
+    iptables-save > /etc/sysconfig/iptables
+    {% if core_enable_ipv6 %}
+    ip6tables-save > /etc/sysconfig/ip6tables
+    {% endif %}
   changed_when: false
+  when: ansible_facts['os_family'] == 'RedHat'
+
+- name: Enable iptables service (RedHat)
+  ansible.builtin.systemd:
+    name: iptables
+    state: started
+    enabled: true
   when: ansible_facts['os_family'] == 'RedHat'

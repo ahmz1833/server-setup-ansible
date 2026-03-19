@@ -7,17 +7,17 @@
   ansible.builtin.hostname:
     name: "{{ core_hostname }}"
 
-- name: Add record to /etc/host for new hostname
+- name: Add hostname to /etc/hosts
   ansible.builtin.lineinfile:
     dest: /etc/hosts
-    regexp: '.*{{ inventory_hostname }}$'
-    line: "127.0.0.1 {{ inventory_hostname }}"
+    regexp: '.*{{ core_hostname }}$'
+    line: "127.0.0.1 {{ core_hostname }}"
     state: present
 
 - name: Determine active APT mirror
   ansible.builtin.set_fact:
     core_active_apt_mirror: >-
-      {% if core_apt_mirror is defined and core_apt_mirror != '' %}
+      {% if core_apt_mirror | default('') | length > 0 %}
       {{ core_apt_mirror }}
       {% elif core_is_iran | default(false) %}
       http://mirror.arvancloud.ir/ubuntu
@@ -27,8 +27,7 @@
   when:
     - ansible_facts['os_family'] == 'Debian'
     - core_active_apt_mirror is defined
-    - core_active_apt_mirror is not none
-    - core_active_apt_mirror | length > 0
+    - core_active_apt_mirror | trim | length > 0
   block:
     - name: Find core OS APT source files
       ansible.builtin.find:
@@ -44,7 +43,7 @@
     - name: Configure custom APT mirror (Legacy .list format)
       ansible.builtin.replace:
         path: "{{ item.path }}"
-        regexp: '^(deb(?:-src)?\s+)(?:https?://[^\s]+)(\s+.*)$'
+        regexp: '^(deb(?:-src)?\s+)https?://[^\s]+(\s+)'
         replace: '\g<1>{{ core_active_apt_mirror }}\g<2>'
       loop: "{{ core_apt_files.files | default([]) }}"
       when: item.path.endswith('.list')
@@ -52,8 +51,8 @@
     - name: Configure custom APT mirror (Modern DEB822 .sources format)
       ansible.builtin.replace:
         path: "{{ item.path }}"
-        regexp: '^URIs:\s+https?://.*$'
-        replace: 'URIs: {{ core_active_apt_mirror }}'
+        regexp: '^(URIs:\s+)https?://[^\s]+'
+        replace: '\g<1>{{ core_active_apt_mirror }}'
       loop: "{{ core_apt_files.files | default([]) }}"
       when: item.path.endswith('.sources')
 
@@ -63,8 +62,14 @@
     cache_valid_time: 3600
   when: ansible_facts['os_family'] == 'Debian'
 
+- name: Update package cache (RedHat)
+  ansible.builtin.dnf:
+    update_cache: true
+  become: true
+  when: ansible_facts['os_family'] == 'RedHat'
+
 - name: Install common packages
   ansible.builtin.package:
-    name: "{{ core_packages }}"
+    name: "{{ core_packages + core_extra_packages }}"
     state: present
-  when: core_packages | length > 0
+  when: (core_packages + core_extra_packages) | length > 0

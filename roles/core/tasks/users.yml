@@ -1,50 +1,34 @@
 ---
-- name: Get all human users (UID > 999)
+- name: Get all human users (UID >= 1000)
   ansible.builtin.getent:
     database: passwd
 
 - name: Build list of human users
   ansible.builtin.set_fact:
-    core_users_in_vm: >-
-      {% set _users = [] -%}
-      {% for name, fields in ansible_facts.getent_passwd.items() -%}
-        {% if fields[1] | int >= 1000 -%}
-          {% set _ = _users.append(name) -%}
-        {% endif -%}
-      {% endfor -%}
-      {{ _users }}
+    core_existing_users: >-
+      {{ ansible_facts.getent_passwd | dict2items
+         | selectattr('value.1', 'defined')
+         | selectattr('value.1', 'ge', '1000')
+         | map(attribute='key')
+         | reject('equalto', 'nobody')
+         | list }}
 
 - name: Remove unknown users
   ansible.builtin.user:
     name: "{{ item }}"
     state: absent
     remove: true
-  loop: "{{ core_users_in_vm }}"
-  when: >
-    item != 'nobody' and
-    item not in (core_users_whitelist | default([])) and
-    item not in (core_users | map(attribute='name') | list)
-  register: core_users_in_vm
-  check_mode: false
-  changed_when: false
-
-- name: Remove unknown users
-  ansible.builtin.user:
-    name: "{{ item }}"
-    state: absent
-    remove: true
-  loop: "{{ core_users_in_vm.stdout_lines }}"
-  when: >
-    item != 'nobody' and
-    item not in (core_users_whitelist | default([])) and
-    item not in (core_users | map(attribute='name') | list)
+  loop: "{{ core_existing_users }}"
+  when:
+    - item not in (core_users_whitelist | default([]))
+    - item not in (core_users | map(attribute='name') | list)
+    - item != core_primary_user
 
 - name: Ensure user groups exist
   ansible.builtin.group:
     name: "{{ item.group }}"
     state: present
-  loop: "{{ core_users }}"
-  when: item.group is defined
+  loop: "{{ core_users | selectattr('group', 'defined') | list }}"
 
 - name: Create users
   ansible.builtin.user:
@@ -53,9 +37,9 @@
     create_home: true
     shell: "{{ item.shell | default('/bin/bash') }}"
     groups: "{{ item.groups | default(omit) }}"
-    append: "{{ item.append | default(false) }}"
+    append: "{{ item.append | default(true) }}"
     password: "{{ item.password | default(omit) }}"
-    update_password: "{{ item.update_password | default('on_create') }}"
+    update_password: "{{ item.update_password | default('always' if item.password is defined else 'on_create') }}"
   loop: "{{ core_users }}"
   loop_control:
     label: "{{ item.name }}"
@@ -73,20 +57,19 @@
     state: present
     manage_dir: true
     exclusive: true
-  loop: "{{ core_users }}"
-  when: item.ssh_keys is defined or item.ssh_key is defined
+  loop: "{{ core_users | selectattr('ssh_keys', 'defined') | list + core_users | selectattr('ssh_key', 'defined') | list | unique }}"
   loop_control:
     label: "{{ item.name }}"
+  when: item.ssh_keys is defined or item.ssh_key is defined
 
 - name: Configure sudo privileges
   ansible.builtin.copy:
     dest: "/etc/sudoers.d/{{ item.name }}"
-    content: "{{ item.name }} ALL=(ALL) {{ 'NOPASSWD:' if item.sudoer_no_pass | default(false) else '' }} ALL"
+    content: "{{ item.name }} ALL=(ALL) {{ 'NOPASSWD:' if item.sudoer_no_pass | default(false) else '' }}ALL"
     owner: root
     group: root
     mode: '0440'
     validate: 'visudo -cf %s'
-  loop: "{{ core_users }}"
-  when: item.sudoer | default(false)
+  loop: "{{ core_users | selectattr('sudoer', 'defined') | selectattr('sudoer') | list }}"
   loop_control:
     label: "{{ item.name }}"

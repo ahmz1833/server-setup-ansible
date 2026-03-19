@@ -1,0 +1,33 @@
+---
+- name: Install fail2ban
+  ansible.builtin.package:
+    name: fail2ban
+    state: present
+
+- name: Configure fail2ban jail
+  ansible.builtin.template:
+    src: jail.local.j2
+    dest: /etc/fail2ban/jail.local
+    owner: root
+    group: root
+    mode: '0644'
+  notify: Restart fail2ban
+
+- name: Configure extra jails
+  ansible.builtin.copy:
+    content: |
+      [{{ item.key }}]
+      {% for k, v in item.value.items() %}
+      {{ k }} = {{ v }}
+      {% endfor %}
+    dest: "/etc/fail2ban/jail.d/{{ item.key }}.conf"
+    mode: '0644'
+  loop: "{{ core_fail2ban_extra_jails | dict2items }}"
+  when: core_fail2ban_extra_jails | length > 0
+  notify: Restart fail2ban
+
+- name: Enable and start fail2ban
+  ansible.builtin.service:
+    name: fail2ban
+    state: started
+    enabled: true

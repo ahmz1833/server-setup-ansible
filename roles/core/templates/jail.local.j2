@@ -1,11 +1,12 @@
 [DEFAULT]
-bantime = 3600
-findtime = 600
-maxretry = 5
+bantime = {{ core_fail2ban_bantime }}
+findtime = {{ core_fail2ban_findtime }}
+maxretry = {{ core_fail2ban_maxretry }}
+ignoreip = {{ core_fail2ban_ignoreip | join(' ') }}
 
 [sshd]
 enabled = true
 port = {{ core_ssh_port }}
 filter = sshd
-logpath = /var/log/auth.log
-maxretry = 3
+logpath = {{ '/var/log/auth.log' if ansible_facts['os_family'] == 'Debian' else '/var/log/secure' }}
+maxretry = {{ core_fail2ban_ssh_maxretry }}

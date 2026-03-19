@@ -1,36 +1,44 @@
 ---
 - name: Gather facts if they are missing
   ansible.builtin.setup:
-  when: ansible_facts is undefined
-  tags:
-    - always
+  when: ansible_facts is not defined
+  tags: always
 
 - name: Core Setup - System Configuration
   ansible.builtin.import_tasks: system.yml
-  tags:
-    - core-system
+  tags: [core, core-system]
 
 - name: Core Setup - User Management
   ansible.builtin.import_tasks: users.yml
-  tags:
-    - core-users
   when: core_manage_users
+  tags: [core, core-users, core-ssh]
 
 - name: Core Setup - SSH Configuration
   ansible.builtin.import_tasks: ssh.yml
-  tags:
-    - core-ssh
   when: core_manage_ssh
+  tags: [core, core-ssh]
+
+- name: Core Setup - Sysctl Configuration
+  ansible.builtin.import_tasks: sysctl.yml
+  when: core_manage_sysctl
+  tags: [core, core-sysctl]
+
+- name: Core Setup - IPSet Configuration
+  ansible.builtin.import_tasks: ipset.yml
+  when: core_manage_ipset and core_ipsets | length > 0
+  tags: [core, core-ipset]
 
 - name: Core Setup - Firewall Configuration
   ansible.builtin.import_tasks: firewall.yml
-  tags:
-    - core-firewall
-    - core-iptables
   when: core_manage_firewall
+  tags: [core, core-firewall, core-iptables]
 
-- name: Core Setup - Sysctl and Fail2Ban Configuration
-  ansible.builtin.import_tasks: sysctl.yml
-  tags:
-    - core-sysctl
-    - core-fail2ban
+- name: Core Setup - Fail2ban Configuration
+  ansible.builtin.import_tasks: fail2ban.yml
+  when: core_fail2ban_enabled
+  tags: [core, core-fail2ban]
+
+- name: Core Setup - Cron Management
+  ansible.builtin.import_tasks: cron.yml
+  when: core_manage_cron
+  tags: [core, core-cron, core-ipset]

@@ -1,38 +1,32 @@
 ---
-- name: Configure IPv6 state (Enable/Disable)
-  ansible.posix.sysctl:
-    name: "{{ item }}"
-    # If core_enable_ipv6 is false, disable_ipv6 is 1 (true). Otherwise 0.
-    value: "{{ '0' if core_enable_ipv6 else '1' }}"
-    state: present
-    reload: false
-  loop:
-    - net.ipv6.conf.all.disable_ipv6
-    - net.ipv6.conf.default.disable_ipv6
-    - net.ipv6.conf.lo.disable_ipv6
-  notify: Reload sysctl
+- name: Build current sysctl rules
+  ansible.builtin.set_fact:
+    core_sysctl: >-
+      {{
+        core_sysctl_base
+        | combine(core_sysctl_extra)
+        | combine({
+            'net.ipv6.conf.all.disable_ipv6': ('0' if core_enable_ipv6 else '1'),
+            'net.ipv6.conf.default.disable_ipv6': ('0' if core_enable_ipv6 else '1'),
+            'net.ipv6.conf.lo.disable_ipv6': ('0' if core_enable_ipv6 else '1'),
+            'net.ipv4.ip_forward': ('1' if core_sysctl_ip_forward else '0'),
+          })
+        | combine(
+            {'net.ipv6.conf.all.forwarding': '1'}
+            if (core_sysctl_ip_forward and core_enable_ipv6)
+            else {}
+          )
+      }}
 
-- name: Apply general sysctl settings
-  ansible.posix.sysctl:
-    name: "{{ item.key }}"
-    value: "{{ item.value }}"
-    state: present
-    reload: false
-  loop: "{{ core_sysctl | dict2items }}"
-  notify: Reload sysctl
-
-- name: Install fail2ban
-  ansible.builtin.package:
-    name: fail2ban
-    state: present
-  when: core_fail2ban_enabled
-
-- name: Configure fail2ban jail
-  ansible.builtin.template:
-    src: jail.local.j2
-    dest: /etc/fail2ban/jail.local
+- name: Apply exclusive sysctl settings via dedicated file
+  ansible.builtin.copy:
+    dest: /etc/sysctl.d/99-ansible-core.conf
     owner: root
     group: root
     mode: '0644'
-  when: core_fail2ban_enabled
-  notify: Restart fail2ban
+    content: |
+      # Managed by Ansible - DO NOT EDIT MANUALLY
+      {% for key, value in core_sysctl | dictsort %}
+      {{ key }} = {{ value }}
+      {% endfor %}
+  notify: Reload sysctl
