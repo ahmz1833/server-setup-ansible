@@ -1,0 +1,19 @@
+---
+# Expected variables from the caller:
+# asset_name: string (e.g., "lazydocker", "x-ui", "crs-rules")
+# asset_type: string ("binary", "package", "file")
+# asset_version: string (e.g., "==2.4.8" or ">=1.0.0")
+# asset_url: string (Use '%v' to auto-inject the resolved version, e.g., "https://.../v%v/app-%v.tar.gz")
+# asset_dest: string (Absolute path to the final file or directory)
+
+# Optional variables:
+# asset_extract: bool (default: true)
+# asset_extract_src: string (path inside archive, can also use '%v')
+# asset_version_cmd: string (Required if asset_type == 'binary')
+# asset_version_regex: string (Required if asset_type == 'binary')
+# asset_download_locally: bool (default: false)
+# asset_service_stop: string
+# asset_register_path_var: string (Variable name to register the final path)
+
+asset_extract: true
+asset_download_locally: false

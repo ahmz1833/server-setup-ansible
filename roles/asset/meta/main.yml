@@ -1,10 +1,10 @@
 ---
 galaxy_info:
-  role_name: bin
+  role_name: remote_asset
   author: AHMZ
   description: >-
-    Generic utility role to check, download, and install or update
-    single-file binaries from URLs (supports both raw binaries and archives).
+    Universal utility role to check, download, and install/update
+    remote assets including standalone binaries, single files, or extracted directories.
   license: MIT
   min_ansible_version: "2.14"
   platforms:
@@ -17,5 +17,6 @@ galaxy_info:
   galaxy_tags:
     - utility
     - installer
+    - downloader
 
 dependencies: []

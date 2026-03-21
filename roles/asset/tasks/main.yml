@@ -1,0 +1,160 @@
+---
+- name: "Resolve asset destination: {{ asset_name }}"
+  ansible.builtin.command: "which {{ asset_name }}"
+  register: _asset_which
+  ignore_errors: true
+  changed_when: false
+  when: asset_dest is undefined and (asset_type | default('binary')) == 'binary'
+
+- name: "Set effective asset destination: {{ asset_name }}"
+  ansible.builtin.set_fact:
+    _asset_dest: >-
+      {%- if asset_dest is defined -%}
+        {{ asset_dest }}
+      {%- elif _asset_which.rc is defined and _asset_which.rc == 0 -%}
+        {{ _asset_which.stdout }}
+      {%- else -%}
+        /usr/local/bin/{{ asset_name }}
+      {%- endif -%}
+
+- name: "Check if asset exists at {{ _asset_dest }}"
+  ansible.builtin.stat:
+    path: "{{ _asset_dest }}"
+  register: _asset_stat
+
+- name: "Get version for binary: {{ asset_name }}"
+  ansible.builtin.command: "{{ _asset_dest }} {{ asset_version_cmd }}"
+  register: _asset_version_binary
+  changed_when: false
+  failed_when: false
+  when:
+    - (asset_type | default('binary')) == 'binary'
+    - _asset_stat.stat.exists
+
+- name: "Get version for file/package: {{ asset_name }}"
+  ansible.builtin.slurp:
+    src: "{{ _asset_dest + '/.ansible_version'
+            if (asset_type | default('binary')) == 'package'
+            else (_asset_dest | dirname) + '/.' + asset_name + '_ansible_version' }}"
+  register: _asset_version_file
+  ignore_errors: true
+  when:
+    - (asset_type | default('binary')) in ['file', 'package']
+    - _asset_stat.stat.exists
+
+- name: "Parse installed version: {{ asset_name }}"
+  ansible.builtin.set_fact:
+    _asset_installed_version: >-
+      {%- if (asset_type | default('binary')) == 'binary' and _asset_version_binary is defined -%}
+        {{
+          (_asset_version_binary.stdout | default('') ~ _asset_version_binary.stderr | default(''))
+          | regex_search(asset_version_regex, '\1')
+          | first
+          | default('')
+        }}
+      {%- elif (asset_type | default('binary')) in ['file', 'package'] and _asset_version_file is defined -%}
+        {{ (_asset_version_file.content | b64decode | trim) if _asset_version_file.content is defined else '' }}
+      {%- else -%}
+        {{ '' }}
+      {%- endif -%}
+  when: _asset_stat.stat.exists
+
+- name: "Parse target version requirements: {{ asset_name }}"
+  ansible.builtin.set_fact:
+    _asset_target_ver: "{{ asset_version | regex_replace('^(>=|==)', '') }}"
+    _asset_op: "{{ '==' if asset_version.startswith('==') else '>=' }}"
+
+- name: "Determine if installation is needed: {{ asset_name }}"
+  ansible.builtin.set_fact:
+    _asset_install_needed: "{{ not _asset_stat.stat.exists
+                              or (_asset_installed_version | default('0.0.0', true)) is not ansible.builtin.version(_asset_target_ver, _asset_op) }}"
+    _asset_resolved_url: "{{ asset_url | replace('%v', _asset_target_ver) }}"
+    _asset_resolved_extract_src: "{{ (asset_extract_src | default(asset_name)) | replace('%v', _asset_target_ver) }}"
+
+- name: "Update/Install asset: {{ asset_name }}"
+  when: _asset_install_needed
+  block:
+    - name: "Create temporary directory for {{ asset_name }}"
+      ansible.builtin.tempfile:
+        state: directory
+        prefix: "{{ asset_name }}_"
+      register: _asset_tempdir
+      delegate_to: "{{ 'localhost' if asset_download_locally | default(false) else inventory_hostname }}"
+      become: "{{ not (asset_download_locally | default(false)) }}"
+
+    - name: "Download and extract archive: {{ asset_name }}"
+      ansible.builtin.unarchive:
+        src: "{{ _asset_resolved_url }}"
+        dest: "{{ _asset_tempdir.path }}"
+        remote_src: true
+      delegate_to: "{{ 'localhost' if asset_download_locally | default(false) else inventory_hostname }}"
+      become: "{{ not (asset_download_locally | default(false)) }}"
+      when: asset_extract | default(true) | bool
+
+    - name: "Download raw asset: {{ asset_name }}"
+      ansible.builtin.get_url:
+        url: "{{ _asset_resolved_url }}"
+        dest: "{{ _asset_tempdir.path }}/{{ _asset_resolved_extract_src }}"
+        mode: '0644'
+      delegate_to: "{{ 'localhost' if asset_download_locally | default(false) else inventory_hostname }}"
+      become: "{{ not (asset_download_locally | default(false)) }}"
+      when: not (asset_extract | default(true) | bool)
+
+    - name: "Stop service before update: {{ asset_service_stop | default('None') }}"
+      ansible.builtin.systemd:
+        name: "{{ asset_service_stop }}"
+        state: stopped
+      failed_when: false
+      when: asset_service_stop is defined
+
+    - name: "Copy binary or file to target destination: {{ asset_name }}"
+      ansible.builtin.copy:
+        src: "{{ _asset_tempdir.path }}/{{ _asset_resolved_extract_src }}"
+        dest: "{{ _asset_dest }}"
+        mode: "{{ '0755' if (asset_type | default('binary')) == 'binary' else '0644' }}"
+        owner: root
+        group: root
+        remote_src: "{{ not (asset_download_locally | default(false)) }}"
+      when: (asset_type | default('binary')) in ['binary', 'file']
+
+    - name: "Ensure package destination directory exists: {{ asset_name }}"
+      ansible.builtin.file:
+        path: "{{ _asset_dest }}"
+        state: directory
+        mode: '0755'
+        owner: root
+        group: root
+      when: (asset_type | default('binary')) == 'package'
+
+    - name: "Copy package contents to target destination: {{ asset_name }}"
+      ansible.builtin.copy:
+        src: "{{ _asset_tempdir.path }}/{{ _asset_resolved_extract_src }}{{ '' if _asset_resolved_extract_src.endswith('/') else '/' }}"
+        dest: "{{ _asset_dest }}/"
+        mode: preserve
+        owner: root
+        group: root
+        remote_src: "{{ not (asset_download_locally | default(false)) }}"
+      when: (asset_type | default('binary')) == 'package'
+
+    - name: "Write version tracker for non-binary assets: {{ asset_name }}"
+      ansible.builtin.copy:
+        content: "{{ _asset_target_ver }}"
+        dest: "{{ _asset_dest + '/.ansible_version'
+                  if (asset_type | default('binary')) == 'package'
+                  else (_asset_dest | dirname) + '/.' + asset_name + '_ansible_version' }}"
+        mode: '0644'
+      when: (asset_type | default('binary')) != 'binary'
+
+  always:
+    - name: "Clean up temporary directory for {{ asset_name }}"
+      ansible.builtin.file:
+        path: "{{ _asset_tempdir.path }}"
+        state: absent
+      delegate_to: "{{ 'localhost' if asset_download_locally | default(false) else inventory_hostname }}"
+      become: "{{ not (asset_download_locally | default(false)) }}"
+      when: _asset_tempdir.path is defined
+
+- name: "Register dynamic fact for asset path"
+  ansible.builtin.set_fact:
+    "{{ asset_register_path_var }}": "{{ _asset_dest }}"
+  when: asset_register_path_var is defined
