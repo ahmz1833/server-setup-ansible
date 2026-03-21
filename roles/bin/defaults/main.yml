@@ -1,0 +1,19 @@
+---
+# Default fallback destination if the binary is not found via 'which'
+bin_default_dest: "/usr/local/bin/{{ bin_name }}"
+
+# Default to extracting downloaded archives
+bin_extract: true
+
+# Default source path inside the archive (assumes the binary is at the root)
+bin_extract_src: "{{ bin_name }}"
+
+# Default to executing on the target node directly
+bin_download_locally: false
+
+# Example required variables from the caller:
+# bin_name: "lazydocker"
+# bin_version: "0.23.1"             # You can set "==0.23.1" or ">=0.23.1", if you set "0.23.1" defaults consider ">=" strategy.
+# bin_url: "https://.../lazydocker.tar.gz"
+# bin_version_args: "--version"
+# bin_version_regex: "Version:\\s*([0-9.]+)"

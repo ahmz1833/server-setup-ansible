@@ -1,0 +1,21 @@
+---
+galaxy_info:
+  role_name: bin
+  author: AHMZ
+  description: >-
+    Generic utility role to check, download, and install or update
+    single-file binaries from URLs (supports both raw binaries and archives).
+  license: MIT
+  min_ansible_version: "2.14"
+  platforms:
+    - name: Ubuntu
+      versions: [focal, jammy, noble]
+    - name: Debian
+      versions: [bullseye, bookworm]
+    - name: EL
+      versions: ["8", "9"]
+  galaxy_tags:
+    - utility
+    - installer
+
+dependencies: []

@@ -1,0 +1,89 @@
+---
+- name: "Check if is installed: {{ bin_name }}"
+  ansible.builtin.command: "which {{ bin_name }}"
+  register: _bin_which
+  ignore_errors: true
+  changed_when: false
+
+- name: "Set binary path: {{ bin_name }}"
+  ansible.builtin.set_fact:
+    _bin_path: "{{ _bin_which.stdout | default(bin_default_dest, true) }}"
+
+- name: "Get installed version: {{ bin_name }}"
+  ansible.builtin.command: "{{ _bin_path }} {{ bin_version_args }}"
+  register: _bin_version_check
+  changed_when: false
+  failed_when: false
+  when: _bin_which.rc == 0
+
+- name: "Parse installed version: {{ bin_name }}"
+  ansible.builtin.set_fact:
+    _bin_installed_version: >-
+      {{
+        (_bin_version_check.stdout | default('') ~ _bin_version_check.stderr | default(''))
+        | regex_search(bin_version_regex, '\1')
+        | first
+        | default('')
+      }}
+  when: _bin_which.rc == 0
+
+- name: "Determine if installation is needed: {{ bin_name }}"
+  ansible.builtin.set_fact:
+    _bin_install_needed: >-
+      {% set _target_ver = bin_version | regex_replace('^(>=|==)', '') -%}
+      {% set _op = '==' if bin_version.startswith('==') else '>=' -%}
+      {{ _bin_which.rc != 0 or (_bin_installed_version | default('0.0.0', true)) is not ansible.builtin.version(_target_ver, _op) }}
+
+- name: Update/Install {{ bin_name }}
+  when: _bin_install_needed
+  block:
+    - name: "Create temporary directory for {{ bin_name }}"
+      ansible.builtin.tempfile:
+        state: directory
+        prefix: "{{ bin_name }}_"
+      register: _bin_tempdir
+      delegate_to: "{{ 'localhost' if bin_download_locally else inventory_hostname }}"
+      become: "{{ not bin_download_locally }}"
+
+    - name: "Download and extract archive: {{ bin_name }}"
+      ansible.builtin.unarchive:
+        src: "{{ bin_url }}"
+        dest: "{{ _bin_tempdir.path }}"
+        remote_src: true
+      delegate_to: "{{ 'localhost' if bin_download_locally else inventory_hostname }}"
+      become: "{{ not bin_download_locally }}"
+      when: bin_extract | bool
+
+    - name: "Download raw binary: {{ bin_name }}"
+      ansible.builtin.get_url:
+        url: "{{ bin_url }}"
+        dest: "{{ _bin_tempdir.path }}/{{ bin_extract_src }}"
+        mode: '0755'
+      delegate_to: "{{ 'localhost' if bin_download_locally else inventory_hostname }}"
+      become: "{{ not bin_download_locally }}"
+      when: not (bin_extract | bool)
+
+    - name: "Stop service before update: {{ bin_service_stop | default('None') }}"
+      ansible.builtin.systemd:
+        name: "{{ bin_service_stop }}"
+        state: stopped
+      failed_when: false
+      when: bin_service_stop is defined
+
+    - name: "Copy binary to target destination: {{ bin_name }}"
+      ansible.builtin.copy:
+        src: "{{ _bin_tempdir.path }}/{{ bin_extract_src }}"
+        dest: "{{ _bin_path }}"
+        mode: '0755'
+        owner: root
+        group: root
+        remote_src: "{{ not bin_download_locally }}"
+
+  always:
+    - name: Clean up temporary directory for {{ bin_name }}
+      ansible.builtin.file:
+        path: "{{ _bin_tempdir.path }}"
+        state: absent
+      delegate_to: "{{ 'localhost' if bin_download_locally else inventory_hostname }}"
+      become: "{{ not bin_download_locally }}"
+      when: _bin_tempdir.path is defined
