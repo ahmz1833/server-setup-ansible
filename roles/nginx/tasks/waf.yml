@@ -7,24 +7,24 @@
 
 - name: Install modsecurity recommended config via remote_asset
   ansible.builtin.include_role:
-    name: asset
+    name: ahmz.server_setup.asset
   vars:
     asset_name: "modsec-conf"
     asset_type: "file"
     asset_version: "3.0.0"
-    asset_url: "https://raw.githubusercontent.com/owasp-modsecurity/ModSecurity/v3/master/modsecurity.conf-recommended"
+    asset_url: "raw.githubusercontent.com/owasp-modsecurity/ModSecurity/v3/master/modsecurity.conf-recommended"
     asset_dest: "/etc/modsecurity/modsecurity.conf-recommended"
     asset_extract: false
     asset_download_locally: "{{ nginx_download_locally | default(false) }}"
 
 - name: Install unicode mapping file via remote_asset
   ansible.builtin.include_role:
-    name: asset
+    name: ahmz.server_setup.asset
   vars:
     asset_name: "unicode-mapping"
     asset_type: "file"
     asset_version: "3.0.0"
-    asset_url: "https://raw.githubusercontent.com/owasp-modsecurity/ModSecurity/v3/master/unicode.mapping"
+    asset_url: "raw.githubusercontent.com/owasp-modsecurity/ModSecurity/v3/master/unicode.mapping"
     asset_dest: "/etc/modsecurity/unicode.mapping"
     asset_extract: false
     asset_download_locally: "{{ nginx_download_locally | default(false) }}"
@@ -48,12 +48,12 @@
 
 - name: Install CRS setup config via remote_asset
   ansible.builtin.include_role:
-    name: asset
+    name: ahmz.server_setup.asset
   vars:
     asset_name: "crs-setup"
     asset_type: "file"
     asset_version: "3.3.0"
-    asset_url: "https://raw.githubusercontent.com/coreruleset/coreruleset/v3.3/master/crs-setup.conf.example"
+    asset_url: "raw.githubusercontent.com/coreruleset/coreruleset/v3.3/master/crs-setup.conf.example"
     asset_dest: "/etc/modsecurity/crs-setup.conf"
     asset_extract: false
     asset_download_locally: "{{ nginx_download_locally | default(false) }}"

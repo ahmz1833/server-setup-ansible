@@ -83,7 +83,9 @@
   ansible.builtin.set_fact:
     nginx_resolved_proxies: >-
       {%- set result = nginx_resolved_proxies -%}
-      {%- for url_result in nginx_url_contents.results | default([]) -%}
+      {%- set url_results = (hostvars['localhost']['nginx_url_contents']['results']
+          if 'nginx_url_contents' in hostvars['localhost'] else nginx_url_contents.results) | default([]) -%}
+      {%- for url_result in url_results -%}
         {%- if url_result.content is defined -%}
           {%- for line in url_result.content.split('\n') -%}
             {%- set trimmed = line | trim -%}
@@ -97,7 +99,7 @@
         {%- endif -%}
       {%- endfor -%}
       {{ result }}
-  when: nginx_url_contents.results is defined
+  when: nginx_url_refs | length > 0
 
 # -----------------------------------------------------------------------------
 # Deduplicate and Finalize
@@ -110,3 +112,13 @@
   ansible.builtin.debug:
     msg: "Resolved {{ nginx_resolved_trusted_proxies | length }} trusted proxy CIDRs"
     verbosity: 1
+
+# -----------------------------------------------------------------------------
+# Provisioning
+# -----------------------------------------------------------------------------
+- name: Configure real IP and trusted proxies
+  ansible.builtin.template:
+    src: realip.conf.j2
+    dest: /etc/nginx/conf.d/realip.conf
+    mode: '0644'
+  notify: Reload nginx

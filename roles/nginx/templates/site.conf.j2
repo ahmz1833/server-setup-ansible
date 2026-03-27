@@ -109,7 +109,7 @@
     }
 {%- endmacro %}
 {# -------------------------------- Location Block ---------------------------------- #}
-{% macro location_block(loc, site) -%}
+{% macro location_block(loc, site, is_ssl=false) -%}
     location {{ loc.path }} {
         set $endpoint_name "{{ loc.path }}";
 
@@ -125,6 +125,7 @@
 {% endif %}
 
 {% if loc.cache_control is defined %}
+{{ security_headers(site, is_ssl) | indent(8) }}
         add_header Cache-Control "{{ loc.cache_control }}";
 {% endif %}
 
@@ -188,7 +189,7 @@
 {% endif %}
 
 {% for loc in site.locations | default([]) %}
-{{ location_block(loc, site) }}
+{{ location_block(loc, site, is_ssl) }}
 {% endfor %}
 {%- endmacro %}
 {# ------------------------------ Complete Server Block ----------------------------- #}

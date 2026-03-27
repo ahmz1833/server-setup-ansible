@@ -1,35 +1,39 @@
 ---
 - name: Install Nginx and WAF
   ansible.builtin.import_tasks: install.yml
-  tags: [nginx-install, nginx-waf]
+  tags: [nginx, nginx-install, nginx-waf]
   when: nginx_managed
 
 - name: Configure WAF
   ansible.builtin.import_tasks: waf.yml
-  tags: [nginx-waf]
+  tags: [nginx, nginx-waf]
   when: nginx_managed and nginx_waf_install
 
 - name: Configure Nginx
   ansible.builtin.import_tasks: config.yml
-  tags: [nginx-config]
+  tags: [nginx, nginx-config]
   when: nginx_managed
+
+- name: Configure real IP and trusted proxies
+  ansible.builtin.include_tasks: realip.yml
+  tags: [nginx, nginx-realip, nginx-config]
 
 - name: Configure Metrics
   ansible.builtin.import_tasks: metrics.yml
-  tags: [nginx-monitoring]
+  tags: [nginx, nginx-monitoring]
   when: nginx_managed and nginx_exporter_install
 
 - name: Configure Error Pages
   ansible.builtin.import_tasks: error_pages.yml
-  tags: [nginx-error-pages]
+  tags: [nginx, nginx-error-pages]
   when: nginx_managed
 
 - name: Configure Sites
   ansible.builtin.import_tasks: sites.yml
-  tags: [nginx-sites, nginx-error-pages]
+  tags: [nginx, nginx-sites, nginx-error-pages]
   when: nginx_managed
 
 - name: Configure Promtail
   ansible.builtin.import_tasks: promtail.yml
-  tags: [nginx-monitoring, nginx-promtail]
+  tags: [nginx, nginx-monitoring, nginx-promtail]
   when: nginx_managed and nginx_promtail_install

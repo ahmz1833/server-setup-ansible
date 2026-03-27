@@ -15,11 +15,11 @@
 
 - name: Install nginx_exporter via remote_asset role
   ansible.builtin.include_role:
-    name: asset
+    name: ahmz.server_setup.asset
   vars:
     asset_name: "nginx-prometheus-exporter"
     asset_version: "{{ nginx_exporter_version }}"
-    asset_url: "https://github.com/nginxinc/nginx-prometheus-exporter/releases/download/v%v/nginx-prometheus-exporter_%v_linux_amd64.tar.gz"
+    asset_url: "github.com/nginxinc/nginx-prometheus-exporter/releases/download/v%v/nginx-prometheus-exporter_%v_linux_amd64.tar.gz"
     asset_extract: true
     asset_extract_src: "nginx-prometheus-exporter"
     asset_version_cmd: "--version"

@@ -17,8 +17,8 @@
     path: "{{ nginx_default_acme_dir }}"
     state: directory
     mode: '0755'
-    owner: "{{ (ansible_facts['os_family'] == 'Debian') | ternary('www-data', 'nginx') }}"
-    group: "{{ (ansible_facts['os_family'] == 'Debian') | ternary('www-data', 'nginx') }}"
+    owner: "{{ nginx_web_user }}"
+    group: "{{ nginx_web_group }}"
 
 - name: Tune worker_processes in nginx.conf
   ansible.builtin.replace:
@@ -38,17 +38,6 @@
   ansible.builtin.template:
     src: logging.conf.j2
     dest: /etc/nginx/conf.d/logging.conf
-    mode: '0644'
-  notify: Reload nginx
-
-# Resolve trusted proxies from ipsets and URLs
-- name: Resolve trusted proxies
-  ansible.builtin.include_tasks: realip.yml
-
-- name: Configure real IP and trusted proxies
-  ansible.builtin.template:
-    src: realip.conf.j2
-    dest: /etc/nginx/conf.d/realip.conf
     mode: '0644'
   notify: Reload nginx
 
