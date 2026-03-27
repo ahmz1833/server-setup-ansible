@@ -7,7 +7,7 @@
 - name: Configure fail2ban jail
   ansible.builtin.template:
     src: jail.local.j2
-    dest: /etc/fail2ban/jail.local
+    dest: /etc/fail2ban/jail.d/00-server-setup.local
     owner: root
     group: root
     mode: '0644'

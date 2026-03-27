@@ -7,12 +7,46 @@
   ansible.builtin.hostname:
     name: "{{ core_hostname }}"
 
-- name: Add hostname to /etc/hosts
-  ansible.builtin.lineinfile:
-    dest: /etc/hosts
-    regexp: '.*{{ core_hostname }}$'
-    line: "127.0.0.1 {{ core_hostname }}"
-    state: present
+- name: Check /etc/resolv.conf state
+  ansible.builtin.stat:
+    path: /etc/resolv.conf
+  register: core_resolv_conf_stat
+  when: core_manage_nameservers
+
+- name: Remove /etc/resolv.conf symlink before managing file
+  ansible.builtin.file:
+    path: /etc/resolv.conf
+    state: absent
+  when:
+    - core_manage_nameservers
+    - core_resolv_conf_stat.stat.islnk | default(false)
+
+- name: Manage /etc/resolv.conf
+  ansible.builtin.copy:
+    dest: /etc/resolv.conf
+    owner: root
+    group: root
+    mode: '0644'
+    content: |
+      {% for server in core_nameservers %}
+      nameserver {{ server }}
+      {% endfor %}
+  when: core_manage_nameservers
+
+- name: Manage /etc/hosts role section
+  ansible.builtin.blockinfile:
+    path: /etc/hosts
+    marker: "# {mark} ANSIBLE MANAGED CORE HOSTS"
+    block: |
+      127.0.0.1 {{ core_hostname }}
+      ::1 {{ core_hostname }}
+      {% for host_entry in core_hosts_list %}
+      {{ host_entry }}
+      {% endfor %}
+    create: true
+    owner: root
+    group: root
+    mode: '0644'
 
 - name: Determine active APT mirror
   ansible.builtin.set_fact:
@@ -44,7 +78,7 @@
       ansible.builtin.replace:
         path: "{{ item.path }}"
         regexp: '^(deb(?:-src)?\s+)https?://[^\s]+(\s+)'
-        replace: '\g<1>{{ core_active_apt_mirror }}\g<2>'
+        replace: '\g<1>{{ core_active_apt_mirror | trim }}\g<2>'
       loop: "{{ core_apt_files.files | default([]) }}"
       when: item.path.endswith('.list')
 
@@ -52,7 +86,7 @@
       ansible.builtin.replace:
         path: "{{ item.path }}"
         regexp: '^(URIs:\s+)https?://[^\s]+'
-        replace: '\g<1>{{ core_active_apt_mirror }}'
+        replace: '\g<1>{{ core_active_apt_mirror | trim }}'
       loop: "{{ core_apt_files.files | default([]) }}"
       when: item.path.endswith('.sources')
 

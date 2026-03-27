@@ -7,6 +7,4 @@ ignoreip = {{ core_fail2ban_ignoreip | join(' ') }}
 [sshd]
 enabled = true
 port = {{ core_ssh_port }}
-filter = sshd
-logpath = {{ '/var/log/auth.log' if ansible_facts['os_family'] == 'Debian' else '/var/log/secure' }}
 maxretry = {{ core_fail2ban_ssh_maxretry }}

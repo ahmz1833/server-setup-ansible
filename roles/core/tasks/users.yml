@@ -6,18 +6,29 @@
 - name: Build list of human users
   ansible.builtin.set_fact:
     core_existing_users: >-
-      {{ ansible_facts.getent_passwd | dict2items
-         | selectattr('value.1', 'defined')
-         | selectattr('value.1', 'ge', '1000')
-         | map(attribute='key')
-         | reject('equalto', 'nobody')
-         | list }}
+      {% set users = [] -%}
+      {% for key, val in ansible_facts.getent_passwd.items() -%}
+      {% if val[1] is defined and (val[1] | int) >= 1000 and (val[1] | int) < 60000 -%}
+      {% set _ = users.append(key) -%}
+      {% endif -%}
+      {% endfor -%}
+      {{ users }}
 
 - name: Remove unknown users
   ansible.builtin.user:
     name: "{{ item }}"
     state: absent
     remove: true
+  loop: "{{ core_existing_users }}"
+  when:
+    - item not in (core_users_whitelist | default([]))
+    - item not in (core_users | map(attribute='name') | list)
+    - item != core_primary_user
+
+- name: Remove sudo privileges for deleted users
+  ansible.builtin.file:
+    path: "/etc/sudoers.d/{{ item }}"
+    state: absent
   loop: "{{ core_existing_users }}"
   when:
     - item not in (core_users_whitelist | default([]))
@@ -73,3 +84,12 @@
   loop: "{{ core_users | selectattr('sudoer', 'defined') | selectattr('sudoer') | list }}"
   loop_control:
     label: "{{ item.name }}"
+
+- name: Remove sudo privileges for non-sudo users
+  ansible.builtin.file:
+    path: "/etc/sudoers.d/{{ item.name }}"
+    state: absent
+  loop: "{{ core_users }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when: not (item.sudoer | default(false))

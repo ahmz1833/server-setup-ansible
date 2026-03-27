@@ -7,11 +7,38 @@
         path: "{{ core_swap_file }}"
       register: core_swap_file_stat
 
-    - name: Create swap file
+    - name: Try creating swap file with fallocate
       ansible.builtin.command:
-        cmd: "dd if=/dev/zero of={{ core_swap_file }} bs=1M count={{ core_swap_size_mb }}"
-      changed_when: true
+        argv:
+          - fallocate
+          - -l
+          - "{{ core_swap_size_mb }}M"
+          - "{{ core_swap_file }}"
+      register: core_swap_fallocate
+      changed_when: core_swap_fallocate.rc == 0
+      failed_when: false
       when: not core_swap_file_stat.stat.exists
+
+    - name: Remove partial swap file after failed fallocate
+      ansible.builtin.file:
+        path: "{{ core_swap_file }}"
+        state: absent
+      when:
+        - not core_swap_file_stat.stat.exists
+        - core_swap_fallocate.rc != 0
+
+    - name: Create swap file with dd fallback
+      ansible.builtin.command:
+        argv:
+          - dd
+          - if=/dev/zero
+          - "of={{ core_swap_file }}"
+          - bs=1M
+          - "count={{ core_swap_size_mb }}"
+      changed_when: true
+      when:
+        - not core_swap_file_stat.stat.exists
+        - core_swap_fallocate.rc != 0
 
     - name: Set swap file permissions
       ansible.builtin.file:

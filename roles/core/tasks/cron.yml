@@ -40,8 +40,10 @@
 # -----------------------------------------------------------------------------
 - name: Get existing cron jobs with our prefix
   ansible.builtin.shell: |
-    set -euo pipefail
+    set -o pipefail
     crontab -l 2>/dev/null | grep -E '^#.*{{ core_cron_prefix }}' | sed 's/^# //' || true
+  args:
+    executable: /bin/bash
   register: core_cron_existing
   changed_when: false
   when: core_cron_exclusive | default(true)

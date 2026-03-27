@@ -12,6 +12,13 @@ core_primary_user: '{{ primary_user | default("root") }}'
 core_timezone: "{{ 'Asia/Tehran' if core_is_iran else 'Etc/UTC' }}"
 core_hostname: "{{ inventory_hostname }}"
 
+# DNS / Hosts Configuration
+core_manage_nameservers: "{{ (core_nameservers | length) > 0 }}"
+core_nameservers: []
+
+# Managed exclusively inside the role-managed section in /etc/hosts
+core_hosts_list: []
+
 # APT mirror (empty = use default, or set explicitly)
 # Auto-selects ArvanCloud mirror for Iran
 core_apt_mirror: ""
@@ -31,6 +38,7 @@ core_packages:
   - vim
   - iotop
   - iftop
+  - tzdata
 
 # Additional packages (role consumer can extend)
 core_extra_packages: []
