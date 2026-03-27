@@ -1,4 +1,32 @@
 ---
+# -----------------------------------------------------------------------------
+# Backup Configuration
+# -----------------------------------------------------------------------------
+- name: Ensure backup directory exists
+  ansible.builtin.file:
+    path: "{{ nginx_backup_dir }}"
+    state: directory
+    mode: '0700'
+    owner: root
+    group: root
+  when: nginx_backup_enabled | default(true)
+
+- name: Get current epoch for backup suffix
+  ansible.builtin.set_fact:
+    nginx_backup_epoch: "{{ ansible_date_time.epoch }}"
+  when: nginx_backup_enabled | default(true)
+
+- name: Backup nginx.conf before modification
+  ansible.builtin.copy:
+    src: /etc/nginx/nginx.conf
+    dest: "{{ nginx_backup_dir }}/nginx.conf.bak.{{ nginx_backup_epoch }}"
+    remote_src: true
+    mode: '0644'
+  when: nginx_backup_enabled | default(true)
+
+# -----------------------------------------------------------------------------
+# Basic Configuration
+# -----------------------------------------------------------------------------
 - name: Remove default site
   ansible.builtin.file:
     path: /etc/nginx/sites-enabled/default
@@ -17,9 +45,12 @@
     path: "{{ nginx_default_acme_dir }}"
     state: directory
     mode: '0755'
-    owner: "{{ (ansible_facts['os_family'] == 'Debian') | ternary('www-data', 'nginx') }}"
-    group: "{{ (ansible_facts['os_family'] == 'Debian') | ternary('www-data', 'nginx') }}"
+    owner: "{{ nginx_web_user }}"
+    group: "{{ nginx_web_group }}"
 
+# -----------------------------------------------------------------------------
+# nginx.conf Tuning
+# -----------------------------------------------------------------------------
 - name: Tune worker_processes in nginx.conf
   ansible.builtin.replace:
     path: /etc/nginx/nginx.conf
@@ -34,21 +65,27 @@
     replace: 'worker_connections {{ nginx_worker_connections }};'
   notify: Reload nginx
 
+- name: Disable default gzip in nginx.conf to prevent duplicates
+  ansible.builtin.replace:
+    path: /etc/nginx/nginx.conf
+    regexp: '^\s*gzip\s+on;'
+    replace: '# gzip on;'
+  notify: Reload nginx
+
+- name: Disable default server_tokens in nginx.conf
+  ansible.builtin.replace:
+    path: /etc/nginx/nginx.conf
+    regexp: '^\s*server_tokens\s+.*;'
+    replace: '# server_tokens off;'
+  notify: Reload nginx
+
+# -----------------------------------------------------------------------------
+# Configuration Files
+# -----------------------------------------------------------------------------
 - name: Configure custom logging
   ansible.builtin.template:
     src: logging.conf.j2
     dest: /etc/nginx/conf.d/logging.conf
-    mode: '0644'
-  notify: Reload nginx
-
-# Resolve trusted proxies from ipsets and URLs
-- name: Resolve trusted proxies
-  ansible.builtin.include_tasks: realip.yml
-
-- name: Configure real IP and trusted proxies
-  ansible.builtin.template:
-    src: realip.conf.j2
-    dest: /etc/nginx/conf.d/realip.conf
     mode: '0644'
   notify: Reload nginx
 
@@ -66,13 +103,6 @@
     mode: '0644'
   notify: Reload nginx
 
-- name: Disable default gzip in nginx.conf to prevent duplicates
-  ansible.builtin.replace:
-    path: /etc/nginx/nginx.conf
-    regexp: '^\s*gzip\s+on;'
-    replace: '# gzip on;'
-  notify: Reload nginx
-
 - name: Configure global security settings
   ansible.builtin.template:
     src: security.conf.j2
@@ -80,15 +110,28 @@
     mode: '0644'
   notify: Reload nginx
 
-- name: Disable default server_tokens in nginx.conf
-  ansible.builtin.replace:
-    path: /etc/nginx/nginx.conf
-    regexp: '^\s*server_tokens\s+.*;'
-    replace: '# server_tokens off;'
-  notify: Reload nginx
-
 - name: Configure Nginx logrotate
   ansible.builtin.template:
     src: logrotate.j2
     dest: /etc/logrotate.d/nginx
     mode: '0644'
+
+# -----------------------------------------------------------------------------
+# Cleanup Old Backups (keep last 10)
+# -----------------------------------------------------------------------------
+- name: Find old nginx.conf backups
+  ansible.builtin.find:
+    paths: "{{ nginx_backup_dir }}"
+    patterns: "nginx.conf.bak.*"
+    file_type: file
+  register: nginx_conf_backups
+  when: nginx_backup_enabled | default(true)
+
+- name: Remove old nginx.conf backups (keep last 10)
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: absent
+  loop: "{{ (nginx_conf_backups.files | sort(attribute='mtime') | list)[:-10] }}"
+  when:
+    - nginx_backup_enabled | default(true)
+    - nginx_conf_backups.files | length > 10

@@ -9,7 +9,11 @@ server {
         deny all;
     }
 
-    # Blackhole for Promtail when Loki is not configured
+    # Blackhole for Promtail when Loki is not configured.
+    # This local 204 fallback is an intentional operational safeguard,
+    # allowing the Promtail metrics pipeline to function perfectly 
+    # (parsing logs into Prometheus metrics) without crashing or 
+    # flooding error logs when a remote Loki URL isn't present.
     location /loki/api/v1/push {
         access_log off;
         return 204;

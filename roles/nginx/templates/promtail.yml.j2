@@ -16,6 +16,9 @@ scrape_configs:
         labels:
           job: nginx
           __path__: /var/log/nginx/*_access.log
+{% for key, val in nginx_promtail_extra_labels.items() %}
+          {{ key }}: "{{ val }}"
+{% endfor %}
     pipeline_stages:
       - match:
           selector: '{job="nginx"}'
@@ -29,10 +32,12 @@ scrape_configs:
                   client_ip: remote_addr
                   endpoint: endpoint
             - labels:
+                # Note: To prevent cardinality explosions in Prometheus, `client_ip` is intentionally EXCLUDED from labels.
                 status:
                 method:
                 domain:
                 endpoint:
+                # The 'endpoint' metric relies strictly on static map values ($endpoint_name set via Ansible), NEVER raw user URIs.
             - metrics:
                 nginx_http_requests_total:
                   type: Counter

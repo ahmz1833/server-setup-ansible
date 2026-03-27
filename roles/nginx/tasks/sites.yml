@@ -1,4 +1,37 @@
 ---
+# -----------------------------------------------------------------------------
+# Backup Existing Site Configurations
+# -----------------------------------------------------------------------------
+- name: Site Backup Block
+  when: nginx_backup_enabled | default(true)
+  block:
+    - name: Find existing site configurations for backup
+      ansible.builtin.find:
+        paths: /etc/nginx/sites-available
+        patterns: "*.conf"
+        file_type: file
+      register: nginx_existing_sites
+
+    - name: Backup existing site configurations
+      ansible.builtin.copy:
+        src: "{{ item.path }}"
+        dest: "{{ nginx_backup_dir }}/sites/{{ item.path | basename }}.bak.{{ ansible_date_time.epoch }}"
+        remote_src: true
+        mode: '0644'
+      loop: "{{ nginx_existing_sites.files | default([]) }}"
+      when: nginx_existing_sites.files | default([]) | length > 0
+
+    - name: Ensure site backup directory exists
+      ansible.builtin.file:
+        path: "{{ nginx_backup_dir }}/sites"
+        state: directory
+        mode: '0700'
+        owner: root
+        group: root
+
+# -----------------------------------------------------------------------------
+# Generate Site Configurations
+# -----------------------------------------------------------------------------
 - name: Generate site configs
   ansible.builtin.template:
     src: site.conf.j2
@@ -16,6 +49,9 @@
   loop: "{{ nginx_sites }}"
   notify: Reload nginx
 
+# -----------------------------------------------------------------------------
+# Cleanup Unmanaged Sites
+# -----------------------------------------------------------------------------
 - name: Find all enabled site configurations
   ansible.builtin.find:
     paths:
@@ -37,6 +73,9 @@
   when: item.path | basename not in expected_configs
   notify: Reload nginx
 
+# -----------------------------------------------------------------------------
+# Validation and Service Management
+# -----------------------------------------------------------------------------
 - name: Validate Nginx configuration syntax (Guardrail)
   ansible.builtin.command: nginx -t
   changed_when: false
@@ -46,3 +85,28 @@
     name: nginx
     state: started
     enabled: true
+
+# -----------------------------------------------------------------------------
+# Cleanup Old Site Backups (keep last 5 per site)
+# -----------------------------------------------------------------------------
+- name: Find old site backups
+  ansible.builtin.find:
+    paths: "{{ nginx_backup_dir }}/sites"
+    patterns: "*.conf.bak.*"
+    file_type: file
+  register: nginx_site_backups
+  when: nginx_backup_enabled | default(true)
+
+- name: Group and cleanup old site backups
+  ansible.builtin.shell: |
+    set -o pipefail
+    cd "{{ nginx_backup_dir }}/sites" || exit 0
+    for prefix in $(ls -1 *.conf.bak.* 2>/dev/null | sed 's/\.bak\.[0-9]*$//' | sort -u); do
+      ls -1t "${prefix}.bak."* 2>/dev/null | tail -n +6 | xargs -r rm -f
+    done
+  args:
+    executable: /bin/bash
+  changed_when: false
+  when:
+    - nginx_backup_enabled | default(true)
+    - nginx_site_backups.files | default([]) | length > 0

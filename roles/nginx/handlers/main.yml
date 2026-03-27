@@ -1,4 +1,9 @@
 ---
+- name: Reload systemd daemon
+  ansible.builtin.systemd:
+    daemon_reload: true
+  listen: "systemd daemon-reload"
+
 - name: Verify nginx config
   ansible.builtin.command: nginx -t
   changed_when: false

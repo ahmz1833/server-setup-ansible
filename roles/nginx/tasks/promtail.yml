@@ -10,11 +10,11 @@
 
 - name: Install promtail via remote_asset role
   ansible.builtin.include_role:
-    name: asset
+    name: ahmz.server_setup.asset
   vars:
     asset_name: "promtail"
     asset_version: "{{ nginx_promtail_version }}"
-    asset_url: "https://github.com/grafana/loki/releases/download/v%v/promtail-linux-amd64.zip"
+    asset_url: "github.com/grafana/loki/releases/download/v%v/promtail-linux-amd64.zip"
     asset_extract: true
     asset_extract_src: "promtail-linux-amd64"
     asset_version_cmd: "--version"
@@ -41,7 +41,9 @@
     src: promtail.service.j2
     dest: /etc/systemd/system/promtail.service
     mode: '0644'
-  notify: Restart promtail
+  notify:
+    - "systemd daemon-reload"
+    - Restart promtail
 
 - name: Enable and start promtail
   ansible.builtin.systemd:

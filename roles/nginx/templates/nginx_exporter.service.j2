@@ -1,12 +1,15 @@
 [Unit]
 Description=NGINX Prometheus Exporter
+Documentation=https://github.com/nginxinc/nginx-prometheus-exporter
 After=network.target nginx.service
 
 [Service]
 Type=simple
 User=nginx_exporter
 Group=nginx_exporter
-ExecStart={{ nginx_exporter_bin_path }} -nginx.scrape-uri=http://127.0.0.1:{{ nginx_dummy_metric_port }}/metrics -web.listen-address=0.0.0.0:{{ nginx_exporter_port }}
+ExecStart={{ nginx_exporter_bin_path }} \
+  -nginx.scrape-uri=http://127.0.0.1:{{ nginx_dummy_metric_port }}/metrics \
+  -web.listen-address={{ nginx_exporter_listen_address }}
 Restart=on-failure
 RestartSec=5
 

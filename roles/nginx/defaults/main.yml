@@ -11,6 +11,17 @@ nginx_managed: false
 # Remove the default Nginx site configuration
 nginx_remove_default_site: true
 
+# Web server user/group (fallback for environments without fact gathering)
+nginx_web_user: "{{ 'nginx' if ansible_facts['os_family'] | default('Debian') == 'RedHat' else 'www-data' }}"
+nginx_web_group: "{{ nginx_web_user }}"
+
+# -----------------------------------------------------------------------------
+# Backup Configuration
+# -----------------------------------------------------------------------------
+# Enable backup of nginx.conf and site configs before modification
+nginx_backup_enabled: true
+nginx_backup_dir: "/etc/nginx/backups"
+
 # -----------------------------------------------------------------------------
 # Global Nginx Tuning
 # -----------------------------------------------------------------------------
@@ -107,10 +118,6 @@ nginx_trusted_proxies_extra: []
 # IPSet data directory (for ipset references)
 nginx_ipset_data_dir: "/var/lib/ipset"
 
-# Cache resolved trusted proxies (avoid re-fetching URLs on every run)
-# Set to false to always refresh
-nginx_trusted_proxies_cache: true
-
 # -----------------------------------------------------------------------------
 # Global Security Settings
 # -----------------------------------------------------------------------------
@@ -189,6 +196,7 @@ nginx_proxy_buffers: "8 4k"
 nginx_ssl_cert_dir: "/etc/ssl/certs"
 
 # Enable serving ACME webroot challenge files automatically for all sites
+# Note: Nginx expects challenges to be placed in {{ nginx_default_acme_dir }}/.well-known/acme-challenge/
 nginx_acme_challenge_enabled: false
 nginx_default_acme_dir: /var/www/acme
 
@@ -235,6 +243,8 @@ nginx_waf_global_settings:
   SecRequestBodyNoFilesLimit: "131072"
   SecResponseBodyAccess: "On"
   SecResponseBodyLimit: "524288"
+# Tip: For false positives, it's better to use site.waf_extra_rules with SecRuleRemoveById
+# overriding specific rules per app, rather than disabling WAF globally.
 
 # -----------------------------------------------------------------------------
 # Prometheus Nginx Exporter
@@ -248,8 +258,9 @@ nginx_exporter_enabled: false
 # Exporter version to install
 nginx_exporter_version: "1.4.0"
 
-# Port for exporter metrics endpoint
-nginx_exporter_port: 9113
+# Listen address for exporter metrics endpoint
+# Use "127.0.0.1:9113" to restrict to localhost only
+nginx_exporter_listen_address: "127.0.0.1:9113"
 
 # Internal port for nginx stub_status (localhost only)
 nginx_dummy_metric_port: 29182
