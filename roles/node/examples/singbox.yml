@@ -43,7 +43,7 @@ example_urltest:
     selectors:
       - tag: auto
         type: urltest
-        use_provider: true
+        use_all_links: true
         url: "https://www.gstatic.com/generate_204"
         interval: "3m"
         tolerance: 50           # Switch only if 50ms faster
@@ -66,7 +66,7 @@ example_fallback:
     selectors:
       - tag: fallback
         type: fallback
-        use_provider: true
+        use_all_links: true
         url: "https://www.gstatic.com/generate_204"
         interval: "1m"
 
@@ -88,7 +88,7 @@ example_selector:
     selectors:
       - tag: manual
         type: selector
-        use_provider: true
+        use_all_links: true
         default: "fast"
 
   node_singbox_final_outbound: "manual"
@@ -123,7 +123,7 @@ example_mixed:
     selectors:
       - tag: auto
         type: urltest
-        use_provider: true      # Only links (server-1, server-2)
+        use_all_links: true      # Only links (server-1, server-2)
         interval: "3m"
 
       - tag: main
@@ -163,7 +163,7 @@ example_chain_links_through_entry:
     selectors:
       - tag: auto
         type: urltest
-        use_provider: true      # Uses hk-1, hk-2, sg-1
+        use_all_links: true      # Uses hk-1, hk-2, sg-1
         detour: "entry"         # All go through entry first
         url: "https://www.gstatic.com/generate_204"
         interval: "3m"
@@ -709,6 +709,7 @@ example_inbound_tun_custom:
   node_singbox_tun_stack: "gvisor"      # Better compatibility
   node_singbox_tun_mtu: 9000            # Jumbo frames
   node_singbox_tun_auto_route: true
+  node_singbox_tun_auto_redirect: false
   node_singbox_tun_strict_route: false  # Less strict routing
 
 # =============================================================================
@@ -742,7 +743,7 @@ example_production_simple:
     selectors:
       - tag: auto
         type: urltest
-        use_provider: true
+        use_all_links: true
         interval: "3m"
 
   node_singbox_final_outbound: "auto"
@@ -819,11 +820,6 @@ example_production_full:
 
   node_singbox_final_outbound: "manual"
 
-  node_singbox_provider_healthcheck:
-    enabled: true
-    url: "https://www.gstatic.com/generate_204"
-    interval: "3m"
-
 # =============================================================================
 # SUPPORTED LINK FORMATS
 # =============================================================================
@@ -871,7 +867,7 @@ example_production_full:
 #
 # 1. Links through config entry:
 #    configs: [{tag: entry, type: socks, ...}]
-#    selectors: [{use_provider: true, detour: "entry"}]
+#    selectors: [{use_all_links: true, detour: "entry"}]
 #
 # 2. Links through link entry:
 #    links: ["...#entry", "...#exit1", "...#exit2"]

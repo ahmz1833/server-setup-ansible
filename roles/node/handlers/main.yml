@@ -13,6 +13,13 @@
     daemon_reload: true
   when: node_gost_enabled
 
+- name: Restart x-ui
+  ansible.builtin.systemd:
+    name: x-ui
+    state: restarted
+    daemon_reload: true
+  when: node_xui_enabled
+
 - name: Restart node_exporter
   ansible.builtin.systemd:
     name: node_exporter

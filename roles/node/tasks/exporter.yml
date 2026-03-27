@@ -6,24 +6,20 @@
     shell: /sbin/nologin
     state: present
 
-- name: Install node_exporter via Binary Install role
+- name: Install/Update node_exporter via remote_asset role
   ansible.builtin.include_role:
-    name: bin
+    name: ahmz.server_setup.asset
   vars:
-    bin_name: "node_exporter"
-    bin_version: "{{ node_exporter_version }}"
-    bin_url: "{{ 'https://github.com/prometheus/node_exporter/releases' ~
-                 '/download/v' ~ node_exporter_version ~ '/node_exporter-' ~ node_exporter_version ~ '.linux-amd64.tar.gz' }}"
-    bin_extract: true
-    bin_extract_src: "node_exporter-{{ node_exporter_version }}.linux-amd64/node_exporter"
-    bin_version_args: "--version"
-    bin_version_regex: 'version\s+([0-9.]+)'
-    bin_service_stop: "node_exporter"
-    bin_download_locally: "{{ node_download_locally | default(false) }}"
-
-- name: Set node_exporter binary path
-  ansible.builtin.set_fact:
-    node_exporter_bin_path: "{{ _bin_path | default('/usr/local/bin/node_exporter') }}"
+    asset_name: "node_exporter"
+    asset_version: "{{ node_exporter_version }}"
+    asset_url: "github.com/prometheus/node_exporter/releases/download/v%v/node_exporter-%v.linux-amd64.tar.gz"
+    asset_extract: true
+    asset_extract_src: "node_exporter-%v.linux-amd64/node_exporter"
+    asset_version_cmd: "--version"
+    asset_version_regex: 'version\s+([0-9.]+)'
+    asset_service_stop: "node_exporter"
+    asset_download_locally: "{{ node_download_locally | default(false) }}"
+    asset_register_path_var: "node_exporter_bin_path"
 
 - name: Configure node_exporter systemd service
   ansible.builtin.template:

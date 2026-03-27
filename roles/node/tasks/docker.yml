@@ -21,8 +21,21 @@
     msg: "Docker installed: {{ node_docker_version_check.stdout | default('not installed') }}"
   when: node_docker_check.rc == 0
 
+- name: Extract Docker version number
+  ansible.builtin.set_fact:
+    node_docker_current_version: "{{ node_docker_version_check.stdout | regex_search('[0-9]+\\.[0-9]+\\.[0-9]+') }}"
+  when: node_docker_check.rc == 0
+
+- name: Determine if Docker installation is required
+  ansible.builtin.set_fact:
+    node_docker_needs_install: >-
+      {{ node_docker_check.rc != 0 or
+         (node_docker_min_version is defined and
+          node_docker_current_version is defined and
+          node_docker_current_version is version(node_docker_min_version, '<')) }}
+
 - name: Install Docker
-  when: node_docker_check.rc != 0
+  when: node_docker_needs_install
   block:
     - name: Download Docker install script
       ansible.builtin.get_url:
@@ -41,12 +54,16 @@
         path: /tmp/get-docker.sh
         state: absent
 
+    - name: Remove Docker APT repository source
+      ansible.builtin.file:
+        path: /etc/apt/sources.list.d/docker.list
+        state: absent
+
 - name: Check if Docker Compose (plugin) is installed
   ansible.builtin.command: docker compose version
   register: node_docker_compose_plugin_check
   ignore_errors: true
   changed_when: false
-  when: node_docker_compose_install
 
 - name: Install Docker Compose plugin
   ansible.builtin.apt:
@@ -55,27 +72,20 @@
     update_cache: true
     cache_valid_time: 3600
   when:
-    - node_docker_compose_install
     - node_docker_compose_plugin_check.rc != 0
 
-- name: Install Docker Compose standalone via Binary Install role
+- name: Install/Update Docker Compose standalone via remote_asset role
   ansible.builtin.include_role:
-    name: bin
+    name: ahmz.server_setup.asset
   vars:
-    bin_name: "docker-compose"
-    bin_version: "{{ node_docker_compose_version }}"
-    bin_url: "{{ 'https://github.com/docker/compose/releases' ~
-                 '/download/v' ~ node_docker_compose_version ~ '/docker-compose-linux-x86_64' }}"
-    bin_extract: false
-    bin_extract_src: "docker-compose"
-    bin_version_args: "--version"
-    bin_version_regex: 'v?([0-9]+\.[0-9]+\.[0-9]+)'
-    bin_download_locally: "{{ node_download_locally | default(false) }}"
-  when: node_docker_compose_install
-
-- name: Set docker-compose binary path
-  ansible.builtin.set_fact:
-    node_docker_compose_bin_path: "{{ _bin_path | default('/usr/local/bin/docker-compose') }}"
+    asset_name: "docker-compose"
+    asset_version: "{{ node_docker_compose_version }}"
+    asset_url: "github.com/docker/compose/releases/download/v%v/docker-compose-linux-x86_64"
+    asset_extract: false
+    asset_version_cmd: "--version"
+    asset_version_regex: 'v?([0-9]+\.[0-9]+\.[0-9]+)'
+    asset_download_locally: "{{ node_download_locally | default(false) }}"
+    asset_register_path_var: "node_docker_compose_bin_path"
   when: node_docker_compose_install
 
 - name: Add user to docker group

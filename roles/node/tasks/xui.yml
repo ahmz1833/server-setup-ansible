@@ -1,0 +1,81 @@
+---
+- name: Install x-ui package via remote_asset role
+  ansible.builtin.include_role:
+    name: ahmz.server_setup.asset
+  vars:
+    asset_name: "x-ui"
+    asset_type: "package"
+    asset_version: "{{ node_xui_version }}"
+    asset_url: "github.com/{{ node_xui_repo }}/releases/download/v%v/x-ui-linux-amd64.tar.gz"
+    asset_dest: "/usr/local/x-ui"
+    asset_extract: true
+    asset_extract_src: "x-ui"
+    asset_service_stop: "x-ui"
+    asset_download_locally: "{{ node_download_locally | default(false) }}"
+    asset_register_path_var: "node_xui_path"
+
+- name: Ensure X-UI log directory exists
+  ansible.builtin.file:
+    path: /var/log/x-ui
+    state: directory
+    mode: '0755'
+
+- name: Ensure correct executable permissions for X-UI binaries
+  ansible.builtin.file:
+    path: "{{ item }}"
+    mode: '0755'
+  loop:
+    - /usr/local/x-ui/x-ui
+    - /usr/local/x-ui/x-ui.sh
+
+- name: Ensure correct executable permissions for Xray binary
+  ansible.builtin.shell: "chmod +x /usr/local/x-ui/bin/xray-linux-*"
+  args:
+    executable: /bin/bash
+  changed_when: false
+
+- name: Link x-ui CLI tool to /usr/bin
+  ansible.builtin.file:
+    src: /usr/local/x-ui/x-ui.sh
+    dest: /usr/bin/x-ui
+    state: link
+
+- name: Run X-UI database migrations
+  ansible.builtin.command: "/usr/local/x-ui/x-ui migrate"
+  changed_when: false
+  failed_when: false
+
+- name: Apply X-UI Panel settings (Source of Truth)
+  ansible.builtin.command: >
+    /usr/local/x-ui/x-ui setting
+    -username "{{ node_xui_username }}"
+    -password "{{ node_xui_password }}"
+    -port {{ node_xui_port }}
+    -webBasePath "{{ node_xui_web_base_path }}"
+  changed_when: false
+  notify: Restart x-ui
+
+- name: Apply X-UI SSL Certificates (if defined)
+  ansible.builtin.command: >
+    /usr/local/x-ui/x-ui cert
+    -webCert "{{ node_xui_cert_path }}"
+    -webCertKey "{{ node_xui_key_path }}"
+  changed_when: false
+  notify: Restart x-ui
+  when:
+    - node_xui_cert_path | length > 0
+    - node_xui_key_path | length > 0
+
+- name: Link x-ui systemd service
+  ansible.builtin.file:
+    src: /usr/local/x-ui/x-ui.service
+    dest: /etc/systemd/system/x-ui.service
+    state: link
+  notify: Restart x-ui
+
+- name: Manage x-ui service state
+  ansible.builtin.systemd:
+    name: x-ui
+    state: "{{ node_xui_enabled | ternary('started', 'stopped') }}"
+    enabled: "{{ node_xui_enabled }}"
+    daemon_reload: true
