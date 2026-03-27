@@ -3,7 +3,8 @@
 # asset_name: string (e.g., "lazydocker", "x-ui", "crs-rules")
 # asset_type: string ("binary", "package", "file")
 # asset_version: string (e.g., "==2.4.8" or ">=1.0.0")
-# asset_url: string (Use '%v' to auto-inject the resolved version, e.g., "https://.../v%v/app-%v.tar.gz")
+# asset_url: string (URL suffix without scheme, use '%v' to auto-inject the resolved version,
+#                    e.g., "github.com/org/app/releases/download/v%v/app-%v.tar.gz")
 # asset_dest: string (Absolute path to the final file or directory)
 
 # Optional variables:
@@ -14,6 +15,18 @@
 # asset_download_locally: bool (default: false)
 # asset_service_stop: string
 # asset_register_path_var: string (Variable name to register the final path)
+# asset_origin_scheme: string (default: "https://")
+# asset_use_mirror: bool (default: false)
+# asset_mirror_base_url: string (e.g., "https://mirror.com/my-mirror")
+# asset_cache_enabled: bool (default: true, only used when asset_download_locally is true)
+# asset_cache_dir: string (default: "$HOME/.cache/ahmz/server_setup/assets" on localhost)
+# asset_cache_force_refresh: bool (default: false)
 
 asset_extract: true
 asset_download_locally: false
+asset_origin_scheme: "https://"
+asset_use_mirror: false
+asset_mirror_base_url: ""
+asset_cache_enabled: true
+asset_cache_dir: "{{ lookup('env', 'HOME') }}/.cache/ahmz/server_setup/assets"
+asset_cache_force_refresh: false

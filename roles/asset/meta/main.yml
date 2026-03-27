@@ -1,6 +1,6 @@
 ---
 galaxy_info:
-  role_name: remote_asset
+  role_name: asset
   author: AHMZ
   description: >-
     Universal utility role to check, download, and install/update
