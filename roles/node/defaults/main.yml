@@ -16,18 +16,19 @@ node_enable_ipv6: '{{ enable_ipv6 | default(false) }}'
 # -----------------------------------------------------------------------------
 node_singbox_install: '{{ node_internet_restricted }}'
 node_singbox_enabled: false
-node_singbox_version: "1.13.1"
+node_singbox_version: "1.13.3"
 
 # Mixed inbound (SOCKS5 + HTTP proxy)
 node_singbox_mixed_listen: "127.0.0.1"
 node_singbox_mixed_port: 10808
 
 # TUN inbound (transparent proxy)
-node_singbox_tun_enabled: true
+node_singbox_tun_enabled: false
 node_singbox_tun_interface: "tun-sb"
 node_singbox_tun_stack: "system"              # system, gvisor, mixed
 node_singbox_tun_mtu: 1500
 node_singbox_tun_auto_route: true
+node_singbox_tun_auto_redirect: true
 node_singbox_tun_strict_route: true
 node_singbox_tun_inet4_address: "172.19.0.1/30"
 node_singbox_tun_inet6_address: "fdfe:dcba:9876::1/126"
@@ -49,6 +50,18 @@ node_singbox_dns:
   #     rcode: "NOERROR"
   #     answer: "localhost. IN A 127.0.0.1"
 
+node_singbox_dns_default_rules:
+  - action: "predefined"
+    domain: "localhost"
+    rcode: "NOERROR"
+    answer: "localhost. IN A 127.0.0.1"
+  - rule_set: ["geosite-ir"]
+    action: "route"
+    server: "dns-direct"
+  - domain_suffix: [".ir"]
+    action: "route"
+    server: "dns-direct"
+
 # Outbound Configuration
 # Three ways to define outbounds:
 # 1. LINKS (parsed by sing-box natively):
@@ -58,7 +71,7 @@ node_singbox_dns:
 # 2. CONFIGS (direct sing-box format):
 #    Full control, supports all fields including 'detour' for chaining.
 # 3. SELECTORS (urltest, fallback, selector):
-#    Reference other outbounds by tag or use_provider: true.
+#    Reference other outbounds by tag or use_all_links: true
 #    Can have 'detour' field for chaining.
 node_singbox_outbounds:
   links: []
@@ -81,22 +94,32 @@ node_singbox_outbounds:
   # Example:
   #   - tag: auto
   #     type: urltest
-  #     use_provider: true
-  #     detour: "entry"           # Chain all through entry
+  #     use_all_links: true
+  #     detour: "entry"           # Chain all links through entry
   #     interval: "3m"
 
 # Final outbound for unmatched traffic
 node_singbox_final_outbound: "proxy"
 
-# Provider health check settings
-node_singbox_provider_healthcheck:
-  enabled: true
-  url: "https://www.gstatic.com/generate_204"
-  interval: "3m"
-
-# Rule Sets
+# Rule Sets - configurable for different regions
+# Set to empty list to disable rule-based routing
 # node_singbox_ruleset_base_url: "https://raw.githubusercontent.com/Chocolate4U/Iran-sing-box-rules/release"
 node_singbox_ruleset_base_url: "https://s3.ahmz.ir/rule-set/Iran-sing-box-rules/Chocolate4U"
+
+# Direct routing rules (bypass proxy)
+# These rule_sets will be downloaded and used for direct routing
+node_singbox_direct_rulesets:
+  - tag: "geoip-ir"
+    url: "{{ node_singbox_ruleset_base_url }}/geoip-ir.srs"
+  - tag: "geosite-ir"
+    url: "{{ node_singbox_ruleset_base_url }}/geosite-ir.srs"
+
+# Additional domain suffixes to route directly
+node_singbox_direct_domain_suffix:
+  - ".ir"
+
+# Additional IP CIDRs to route directly
+node_singbox_direct_ip_cidr: []
 
 # -----------------------------------------------------------------------------
 # TOOLS & BOOTSTRAP
@@ -104,6 +127,7 @@ node_singbox_ruleset_base_url: "https://s3.ahmz.ir/rule-set/Iran-sing-box-rules/
 # -----------------------------------------------------------------------------
 node_tools_packages:
   - zsh
+  - tmux
   - ripgrep
   - git
   - curl
@@ -122,6 +146,10 @@ node_tools_packages:
 # Downloads and executes bootstrap script for shell environment setup
 # (zsh, dotfiles, etc.)
 node_bootstrap_enabled: true
+node_fzf_version: '0.70.0'
+node_eza_version: '0.23.4'
+node_zoxide_version: '0.9.9'
+node_starship_version: '1.24.2'
 node_bootstrap_script_url: "{{ node_internet_restricted | default(false) |
   ternary('https://s3.ahmz.ir/dots/bootstrap.sh',
   'https://raw.githubusercontent.com/ahmz1833/dots/main/bootstrap.sh') }}"
@@ -157,6 +185,25 @@ node_gost_version: "3.2.6"
 node_gost_config: {}
 
 # -----------------------------------------------------------------------------
+# X-UI PANEL
+# -----------------------------------------------------------------------------
+node_xui_install: false
+node_xui_enabled: false
+node_xui_repo: "MHSanaei/3x-ui"
+node_xui_version: "2.4.8"
+
+# Panel Configuration (Ansible acts as the Source of Truth)
+node_xui_port: 2053
+node_xui_web_base_path: "/secret-panel/" # Must include slashes
+node_xui_username: "admin"
+node_xui_password: "admin"
+
+# Optional: Link to ACME certs if you want X-UI to handle its own SSL
+# (Leave empty if putting behind NGINX)
+node_xui_cert_path: ""
+node_xui_key_path: ""
+
+# -----------------------------------------------------------------------------
 # DOCKER
 # Docker container runtime with optional Compose installation.
 # Examples: examples/docker.yml
@@ -185,10 +232,34 @@ node_docker_experimental: false
 node_docker_metrics_enabled: true
 node_docker_metrics_addr: "127.0.0.1:9323"
 
-# Installs both plugin (docker compose) and standalone (docker-compose)
+# Installs standalone docker-compose
 node_docker_compose_install: true
 node_docker_compose_version: "5.1.1"
 
+# -----------------------------------------------------------------------------
+# PROMETHEUS NODE EXPORTER
+# -----------------------------------------------------------------------------
 node_exporter_install: true
 node_exporter_enabled: false
 node_exporter_version: "1.10.2"
+node_exporter_listen_address: "127.0.0.1:9100"
+
+# Collector Configuration
+# List of collectors to explicitly enable (beyond defaults)
+# See: https://prometheus.io/docs/guides/node-exporter/#enabled-by-default
+node_exporter_enabled_collectors: []
+# Examples:
+#   - systemd
+#   - processes
+
+# List of collectors to disable
+node_exporter_disabled_collectors: []
+# Examples:
+#   - wifi
+#   - infiniband
+
+# Additional command-line arguments
+node_exporter_extra_args: []
+# Examples:
+#   - "--collector.systemd.unit-include=docker.service|nginx.service"
+#   - "--collector.filesystem.mount-points-exclude=^/(sys|proc|dev)($|/)"

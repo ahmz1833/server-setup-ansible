@@ -15,11 +15,8 @@
 {%- else -%}
 {%- set _ = result.update({'type': 'udp', 'server': server_config}) -%}
 {%- endif -%}
-{%- if detour -%}
+{%- if detour and detour != 'direct' -%}
 {%- set _ = result.update({'detour': detour}) -%}
-{%- endif -%}
-{%- if result.get('type') != 'local' and result.get('server') -%}
-{%- set _ = result.update({'domain_resolver': 'dns-local'}) -%}
 {%- endif -%}
 {{ result | to_json }}
 {%- endmacro %}
@@ -27,14 +24,6 @@
 {% macro dns_rule(rule) -%}
 {%- set result = {} -%}
 {%- set _ = result.update(rule) -%}
-{%- if result.action is not defined -%}
-{%- if result.server is defined and result.server == 'block' -%}
-{%- set _ = result.update({'action': 'reject'}) -%}
-{%- set _ = result.pop('server') -%}
-{%- else -%}
-{%- set _ = result.update({'action': 'route'}) -%}
-{%- endif -%}
-{%- endif -%}
 {%- if result.server is defined and result.server != 'block' and not result.server.startswith('dns-') -%}
 {%- set _ = result.update({'server': 'dns-' ~ result.server}) -%}
 {%- endif -%}
@@ -44,10 +33,11 @@
 {%- set dns = node_singbox_dns | default({}) -%}
 {%- set dns_fakeip = dns.get('fakeip', true) -%}
 {%- set dns_strategy = dns.get('strategy', 'ipv4_only') -%}
-{%- set dns_rules = dns.get('rules', []) -%}
+{%- set dns_rules = dns.get('rules', []) + node_singbox_dns_default_rules | default([]) -%}
 {%- set outbounds = node_singbox_outbounds | default({}) -%}
-{%- set has_links = (outbounds.links | default([]) | length) > 0 -%}
-{%- set healthcheck = node_singbox_provider_healthcheck | default({}) -%}
+{%- set direct_rulesets = node_singbox_direct_rulesets | default([]) -%}
+{%- set direct_domain_suffix = node_singbox_direct_domain_suffix | default([]) -%}
+{%- set direct_ip_cidr = node_singbox_direct_ip_cidr | default([]) -%}
 {# ================================= MAIN CONFIGURATION ================================= #}
 {
   "log": {
@@ -57,15 +47,15 @@
   "dns": {
     "servers": [
       {{ dns_server(dns.get('remote', 'tls://8.8.8.8'), 'dns-remote', node_singbox_final_outbound) }},
-      {{ dns_server(dns.get('direct', 'local'), 'dns-direct') }},
+      {{ dns_server(dns.get('direct', 'local'), 'dns-direct', 'direct') }},
 {% if dns_fakeip %}
       {
         "tag": "dns-fake",
         "type": "fakeip",
         "inet4_range": "198.18.0.0/15"
-{%- if node_enable_ipv6 %},
+{% if node_enable_ipv6 %},
         "inet6_range": "fc00::/18"
-{%- endif %}
+{% endif %}
       },
 {% endif %}
       {
@@ -74,27 +64,24 @@
       }
     ],
     "rules": [
-{% if dns_fakeip %}
+{% if not node_enable_ipv6 %}
       {
-        "action": "route",
-        "query_type": ["A"{% if node_enable_ipv6 %}, "AAAA"{% endif %}],
-        "invert": true,
-        "server": "dns-fake"
+        "query_type": ["AAAA"],
+        "action": "predefined",
+        "rcode": "REFUSED"
       },
 {% endif %}
 {% for rule in dns_rules %}
-      {{ dns_rule(rule) }},
+      {{ dns_rule(rule) }}{% if not loop.last or dns_fakeip %},{% endif %}
+
 {% endfor %}
+{% if dns_fakeip %}
       {
+        "query_type": ["A"{% if node_enable_ipv6 %}, "AAAA"{% endif %}],
         "action": "route",
-        "rule_set": ["geosite-ir"],
-        "server": "dns-direct"
-      },
-      {
-        "action": "route",
-        "domain_suffix": [".ir"],
-        "server": "dns-direct"
+        "server": "dns-fake"
       }
+{% endif %}
     ],
     "strategy": "{{ dns_strategy }}",
     "independent_cache": true
@@ -113,27 +100,29 @@
       "interface_name": "{{ node_singbox_tun_interface }}",
       "stack": "{{ node_singbox_tun_stack }}",
       "mtu": {{ node_singbox_tun_mtu }},
+      "auto_redirect": {{ node_singbox_tun_auto_redirect | to_json }},
       "auto_route": {{ node_singbox_tun_auto_route | to_json }},
       "strict_route": {{ node_singbox_tun_strict_route | to_json }},
-      "address": [
-        "{{ node_singbox_tun_inet4_address }}"
-{%- if node_enable_ipv6 %},
-        "{{ node_singbox_tun_inet6_address }}"
+      "address": ["{{ node_singbox_tun_inet4_address }}"{% if node_enable_ipv6 %},"{{ node_singbox_tun_inet6_address }}"{% endif %}]
+{%- if direct_rulesets | length > 0 %},
+      "route_exclude_address_set": [{% for rs in direct_rulesets %}"{{ rs.tag }}"{% if not loop.last %}, {% endif %}{% endfor %}]
 {%- endif %}
-      ],
-      "route_exclude_address_set": ["geoip-ir"]
     }
-{%- endif %}
+{% endif %}
   ],
   "outbounds": [
 {% for cfg in outbounds.configs | default([]) %}
     {{ cfg | to_json }},
 {% endfor %}
+{% for proxy in node_singbox_dynamic_proxies | default([]) %}
+    {{ proxy | to_json }},
+{% endfor %}
 {% for selector in outbounds.selectors | default([]) %}
 {%- set sel = selector.copy() -%}
-{%- set use_provider = sel.pop('use_provider', false) -%}
-{%- if use_provider and has_links -%}
-{%- set _ = sel.update({'providers': ['local']}) -%}
+{%- set use_all_links = sel.pop('use_all_links', false) -%}
+{%- if use_all_links and node_singbox_dynamic_proxies is defined -%}
+  {%- set dynamic_tags = node_singbox_dynamic_proxies | map(attribute='tag') | list -%}
+  {%- set _ = sel.update({'outbounds': (sel.get('outbounds', []) + dynamic_tags) | unique }) -%}
 {%- endif %}
     {{ sel | to_json }},
 {% endfor %}
@@ -144,30 +133,13 @@
     {
       "tag": "block",
       "type": "block"
-    },
-    {
-      "tag": "dns-out",
-      "type": "dns"
     }
   ],
-{% if has_links %}
-  "outbound_providers": [
-    {
-      "tag": "local",
-      "type": "file",
-      "path": "/etc/sing-box/providers/local.txt",
-      "healthcheck": {
-        "enabled": {{ healthcheck.get('enabled', true) | to_json }},
-        "url": "{{ healthcheck.get('url', 'https://www.gstatic.com/generate_204') }}",
-        "interval": "{{ healthcheck.get('interval', '3m') }}"
-      }
-    }
-  ],
-{% endif %}
   "route": {
     "rules": [
       {
-        "action": "sniff"
+        "action": "sniff",
+        "inbound": ["mixed-in"{% if node_singbox_tun_enabled %}, "tun-in"{% endif %}]
       },
       {
         "action": "hijack-dns",
@@ -177,34 +149,44 @@
         "action": "route",
         "ip_is_private": true,
         "outbound": "direct"
-      },
+      }
+{%- if direct_rulesets | length > 0 or direct_domain_suffix | length > 0 or direct_ip_cidr | length > 0 %},
       {
         "action": "route",
-        "rule_set": ["geoip-ir", "geosite-ir"],
+{% if direct_rulesets | length > 0 %}
+        "rule_set": [{% for rs in direct_rulesets %}"{{ rs.tag }}"{% if not loop.last %}, {% endif %}{% endfor %}],
+{% endif %}{% if direct_domain_suffix | length > 0 %}
+        "domain_suffix": {{ direct_domain_suffix | to_json }},
+{% endif %}{%- if direct_ip_cidr | length > 0 %}
+        "ip_cidr": {{ direct_ip_cidr | to_json }},
+{% endif %}
         "outbound": "direct"
       }
+{% endif %}
     ],
+{% if direct_rulesets | length > 0 %}
     "rule_set": [
+{% for rs in direct_rulesets %}
       {
-        "tag": "geoip-ir",
+        "tag": "{{ rs.tag }}",
         "type": "remote",
-        "format": "binary",
-        "url": "{{ node_singbox_ruleset_base_url }}/geoip-ir.srs"
-      },
-      {
-        "tag": "geosite-ir",
-        "type": "remote",
-        "format": "binary",
-        "url": "{{ node_singbox_ruleset_base_url }}/geosite-ir.srs"
-      }
+        "format": "{{ rs.format | default('binary') }}",
+        "url": "{{ rs.url }}",
+        "download_detour": "{{ rs.download_detour | default('direct') }}"
+      }{% if not loop.last %},{% endif %}
+
+{% endfor %}
     ],
+{% endif %}
     "final": "{{ node_singbox_final_outbound }}",
-    "auto_detect_interface": true
+    "find_process": true,
+    "auto_detect_interface": true,
+    "default_domain_resolver": "dns-direct"
   },
   "experimental": {
     "cache_file": {
       "enabled": true,
-      "store_fakeip": {{ dns_fakeip | to_json }},
+      "store_fakeip": true,
       "store_rdrc": true
     }
   }

@@ -5,8 +5,65 @@
     state: present
   when: node_tools_packages | length > 0
 
+- name: Install fzf via remote_asset role
+  ansible.builtin.include_role:
+    name: ahmz.server_setup.asset
+  vars:
+    asset_name: "fzf"
+    asset_version: "{{ node_fzf_version }}"
+    asset_url: "github.com/junegunn/fzf/releases/download/v%v/fzf-%v-linux_amd64.tar.gz"
+    asset_extract: true
+    asset_extract_src: "fzf"
+    asset_version_cmd: "--version"
+    asset_version_regex: '([0-9.]+)'
+    asset_download_locally: "{{ node_download_locally | default(false) }}"
+  when: node_bootstrap_enabled and node_fzf_version is defined and (node_fzf_version | length > 0)
+
+- name: Install eza via remote_asset role
+  ansible.builtin.include_role:
+    name: ahmz.server_setup.asset
+  vars:
+    asset_name: "eza"
+    asset_version: "{{ node_eza_version }}"
+    asset_url: "github.com/eza-community/eza/releases/download/v%v/eza_x86_64-unknown-linux-musl.tar.gz"
+    asset_extract: true
+    asset_extract_src: "eza"
+    asset_version_cmd: "--version"
+    asset_version_regex: 'v?([0-9.]+)'
+    asset_download_locally: "{{ node_download_locally | default(false) }}"
+  when: node_bootstrap_enabled and node_eza_version is defined and (node_eza_version | length > 0)
+
+- name: Install zoxide via remote_asset role
+  ansible.builtin.include_role:
+    name: ahmz.server_setup.asset
+  vars:
+    asset_name: "zoxide"
+    asset_version: "{{ node_zoxide_version }}"
+    asset_url: "github.com/ajeetdsouza/zoxide/releases/download/v%v/zoxide-%v-x86_64-unknown-linux-musl.tar.gz"
+    asset_extract: true
+    asset_extract_src: "zoxide"
+    asset_version_cmd: "--version"
+    asset_version_regex: 'zoxide v?([0-9.]+)'
+    asset_download_locally: "{{ node_download_locally | default(false) }}"
+  when: node_bootstrap_enabled and node_zoxide_version is defined and (node_zoxide_version | length > 0)
+
+- name: Install starship via remote_asset role
+  ansible.builtin.include_role:
+    name: ahmz.server_setup.asset
+  vars:
+    asset_name: "starship"
+    asset_version: "{{ node_starship_version }}"
+    asset_url: "github.com/starship/starship/releases/download/v%v/starship-x86_64-unknown-linux-musl.tar.gz"
+    asset_extract: true
+    asset_extract_src: "starship"
+    asset_version_cmd: "--version"
+    asset_version_regex: 'starship\\s+([0-9.]+)'
+    asset_download_locally: "{{ node_download_locally | default(false) }}"
+  when: node_bootstrap_enabled and node_starship_version is defined and (node_starship_version | length > 0)
+
 - name: Download and execute bootstrap script
-  become: false
+  become: true
+  become_user: "{{ node_primary_user }}"
   ansible.builtin.shell: "set -o pipefail && curl -fsSL {{ node_bootstrap_script_url }} | bash -s -- --no-sudo"
   args:
     executable: /bin/bash
@@ -21,15 +78,17 @@
     shell: /bin/zsh
   when: node_bootstrap_enabled
 
-- name: Install lazydocker
+- name: Install/Update lazydocker via remote_asset role
   ansible.builtin.include_role:
-    name: bin
+    name: ahmz.server_setup.asset
   vars:
-    bin_name: "lazydocker"
-    bin_version: "{{ node_lazydocker_version }}"
-    bin_url: "{{ 'https://github.com/jesseduffield/lazydocker/releases' ~
-                 '/download/v' ~ node_lazydocker_version ~ '/lazydocker_' ~ node_lazydocker_version ~ '_Linux_x86_64.tar.gz' }}"
-    bin_version_args: "--version"
-    bin_version_regex: "Version:\\s*([0-9.]+)"
-    bin_download_locally: "{{ node_download_locally | default(false) }}"
+    asset_name: "lazydocker"
+    asset_version: "{{ node_lazydocker_version }}"
+    asset_url: "github.com/jesseduffield/lazydocker/releases/download/v%v/lazydocker_%v_Linux_x86_64.tar.gz"
+    asset_extract: true
+    asset_extract_src: "lazydocker"
+    asset_version_cmd: "--version"
+    asset_version_regex: 'Version:\s*([0-9.]+)'
+    asset_download_locally: "{{ node_download_locally | default(false) }}"
+    asset_register_path_var: "node_lazydocker_bin_path"
   when: node_lazydocker_install

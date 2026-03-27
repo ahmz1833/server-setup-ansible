@@ -1,22 +1,18 @@
 ---
-- name: Install GOST via Binary Install role
+- name: Install/Update GOST via remote_asset role
   ansible.builtin.include_role:
-    name: bin
+    name: ahmz.server_setup.asset
   vars:
-    bin_name: "gost"
-    bin_version: "{{ node_gost_version }}"
-    bin_url: "{{ 'https://github.com/go-gost/gost/releases' ~
-                 '/download/v' ~ node_gost_version ~ '/gost_' ~ node_gost_version ~ '_linux_amd64.tar.gz' }}"
-    bin_extract: true
-    bin_extract_src: "gost"
-    bin_version_args: "-V"
-    bin_version_regex: 'gost\s+([0-9.]+)'
-    bin_service_stop: "gost"
-    bin_download_locally: "{{ node_download_locally | default(false) }}"
-
-- name: Set GOST binary path
-  ansible.builtin.set_fact:
-    node_gost_bin_path: "{{ _bin_path | default('/usr/local/bin/gost') }}"
+    asset_name: "gost"
+    asset_version: "{{ node_gost_version }}"
+    asset_url: "github.com/go-gost/gost/releases/download/v%v/gost_%v_linux_amd64.tar.gz"
+    asset_extract: true
+    asset_extract_src: "gost"
+    asset_version_cmd: "-V"
+    asset_version_regex: 'gost\s+([0-9.]+)'
+    asset_service_stop: "gost"
+    asset_download_locally: "{{ node_download_locally | default(false) }}"
+    asset_register_path_var: "node_gost_bin_path"
 
 - name: Create GOST configuration directory
   ansible.builtin.file:
@@ -38,7 +34,7 @@
 
 - name: Remove GOST configuration if empty
   ansible.builtin.file:
-    path: /etc/gost/config.yaml
+    path: /etc/gost/config.yml
     state: absent
   notify: Restart gost
   when: node_gost_config | length == 0
@@ -48,7 +44,9 @@
     src: gost.service.j2
     dest: /etc/systemd/system/gost.service
     mode: '0644'
-  notify: Restart gost
+  notify:
+    - "systemd daemon-reload"
+    - Restart gost
 
 - name: Manage GOST service state
   ansible.builtin.systemd:

@@ -1,67 +1,64 @@
 ---
-- name: Install sing-box via Binary Install role
+- name: Install sing-box via remote_asset role
   ansible.builtin.include_role:
-    name: bin
+    name: ahmz.server_setup.asset
   vars:
-    bin_name: "sing-box"
-    bin_version: "{{ node_singbox_version }}"
-    bin_url: "{{ 'https://github.com/SagerNet/sing-box/releases' ~
-                 '/download/v' ~ node_singbox_version ~ '/sing-box-' ~ node_singbox_version ~ '-linux-amd64.tar.gz' }}"
-    bin_extract: true
-    bin_extract_src: "sing-box-{{ node_singbox_version }}-linux-amd64/sing-box"
-    bin_version_args: "version"
-    bin_version_regex: 'sing-box version ([0-9.]+)'
-    bin_service_stop: "sing-box"
-    bin_download_locally: "{{ node_download_locally | default(false) }}"
-
-- name: Set sing-box binary path
-  ansible.builtin.set_fact:
-    node_singbox_bin_path: "{{ _bin_path | default('/usr/local/bin/sing-box') }}"
+    asset_name: "sing-box"
+    asset_version: "{{ node_singbox_version }}"
+    asset_url: "github.com/SagerNet/sing-box/releases/download/v%v/sing-box-%v-linux-amd64.tar.gz"
+    asset_extract: true
+    asset_extract_src: "sing-box-%v-linux-amd64/sing-box"
+    asset_version_cmd: "version"
+    asset_version_regex: 'sing-box version ([0-9.]+)'
+    asset_service_stop: "sing-box"
+    asset_download_locally: "{{ node_download_locally | default(false) }}"
+    asset_register_path_var: "node_singbox_bin_path"
 
 - name: Create sing-box directories
   ansible.builtin.file:
-    path: "{{ item }}"
+    path: /etc/sing-box
     state: directory
     mode: '0755'
     owner: root
     group: root
-  loop:
-    - /etc/sing-box
-    - /etc/sing-box/providers
 
-- name: Validate links have tags (fragment)
-  ansible.builtin.assert:
-    that:
-      - "'#' in item"
-    fail_msg: >-
-      Link must have a tag (fragment): {{ item | truncate(60) }}...
-      Add #tag-name at the end of the link.
-    quiet: true
-  loop: "{{ node_singbox_outbounds.links | default([]) }}"
-  loop_control:
-    label: "{{ item | regex_search('#([^#]+)$', '\\1') | first | default('NO TAG') }}"
+- name: Link Conversion Block
+  when: (node_singbox_outbounds.links | default([])) | length > 0
+  delegate_to: localhost
+  run_once: true
+  become: false
+  block:
+    - name: Check if vpnparser is available
+      ansible.builtin.command: which vpnparser
+      register: _node_vpnparser_check
+      changed_when: false
+      failed_when: false
 
-- name: Write local links to provider file
-  ansible.builtin.copy:
-    content: |
-      # Managed by Ansible - Proxy links
-      # Parsed by sing-box outbound_providers
-      {% for link in node_singbox_outbounds.links | default([]) %}
-      {{ link }}
-      {% endfor %}
-    dest: /etc/sing-box/providers/local.txt
-    mode: '0600'
-    owner: root
-    group: root
-  notify: Restart singbox
-  when: (node_singbox_outbounds.links | default([]) | length) > 0
+    - name: Fail if vpnparser is not installed
+      ansible.builtin.fail:
+        msg: |
+          vpnparser is required but not found in PATH.
+          Install it with: go install github.com/ahmz1833/vpnparser@latest
+          Ensure $GOPATH/bin is in your PATH.
+      when: _node_vpnparser_check.rc != 0
 
-- name: Remove provider file if no links
-  ansible.builtin.file:
-    path: /etc/sing-box/providers/local.txt
-    state: absent
-  notify: Restart singbox
-  when: (node_singbox_outbounds.links | default([]) | length) == 0
+    - name: Parse links with vpnparser
+      ansible.builtin.command: "vpnparser sing '{{ item }}'"
+      loop: "{{ node_singbox_outbounds.links }}"
+      register: _node_parsed_links_raw
+      changed_when: false
+
+    - name: Extract pure proxy outbounds from parsed JSON
+      ansible.builtin.set_fact:
+        node_singbox_dynamic_proxies: >-
+          {%- set proxies = [] -%}
+          {%- for res in _node_parsed_links_raw.results -%}
+          {%-   set parsed = res.stdout | regex_replace('^[^{]*', '') | from_json -%}
+          {%-   set link_remark = res.item.split('#', 1)[1] | urldecode if '#' in res.item else 'proxy' -%}
+          {%-   set _ = parsed.update({'tag': link_remark}) -%}
+          {%-   set _ = proxies.append(parsed) -%}
+          {%- endfor -%}
+          {{ proxies }}
 
 - name: Generate sing-box configuration
   ansible.builtin.template:
@@ -78,7 +75,9 @@
     src: singbox.service.j2
     dest: /etc/systemd/system/sing-box.service
     mode: '0644'
-  notify: Restart singbox
+  notify:
+    - "systemd daemon-reload"
+    - Restart singbox
 
 - name: Manage sing-box service state
   ansible.builtin.systemd:

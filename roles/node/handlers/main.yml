@@ -1,28 +1,36 @@
 ---
+# Systemd daemon reload - use 'listen' to allow multiple triggers
+- name: Reload systemd daemon
+  ansible.builtin.systemd:
+    daemon_reload: true
+  listen: "systemd daemon-reload"
+
 - name: Restart singbox
   ansible.builtin.systemd:
     name: sing-box
     state: restarted
-    daemon_reload: true
   when: node_singbox_enabled
 
 - name: Restart gost
   ansible.builtin.systemd:
     name: gost
     state: restarted
-    daemon_reload: true
   when: node_gost_enabled
+
+- name: Restart x-ui
+  ansible.builtin.systemd:
+    name: x-ui
+    state: restarted
+  when: node_xui_enabled
 
 - name: Restart node_exporter
   ansible.builtin.systemd:
     name: node_exporter
     state: restarted
-    daemon_reload: true
   when: node_exporter_enabled
 
 - name: Restart docker
   ansible.builtin.systemd:
     name: docker
     state: restarted
-    daemon_reload: true
   when: node_docker_enabled
