@@ -1,0 +1,60 @@
+---
+- name: Prune unmanaged containers
+  when: apps_prune.containers | default(true)
+  block:
+    - name: Get all containers
+      community.docker.docker_host_info:
+        containers: true
+      register: _apps_docker_info
+
+    - name: Remove unmanaged containers
+      community.docker.docker_container:
+        name: "{{ item.name }}"
+        state: absent
+        force_kill: true
+      loop: >-
+        {%- set to_remove = [] -%}
+        {%- set managed = apps_list | map(attribute='name') | list -%}
+        {%- set patterns = ['^sandbox-.*$'] + (apps_prune.whitelist_patterns | default([])) -%}
+        {%- set whitelist_labels = apps_prune.whitelist_labels | default([]) -%}
+        {%- for c in _apps_docker_info.containers | default([]) -%}
+          {%- set name = c.Names[0] | regex_replace('^/', '') -%}
+          {%- if name not in managed -%}
+            {%- set labels = c.Labels | default({}) -%}
+            {%- set skip = namespace(val=false) -%}
+            {%- for p in patterns -%}
+              {%- if name is match(p) -%}{%- set skip.val = true -%}{%- endif -%}
+            {%- endfor -%}
+            {%- for label_rule in whitelist_labels -%}
+              {%- if label_rule is string -%}
+                {%- if label_rule in labels.keys() -%}{%- set skip.val = true -%}{%- endif -%}
+              {%- elif label_rule is mapping and label_rule.key is defined -%}
+                {%- if labels.get(label_rule.key) == (label_rule.value | string) -%}
+                  {%- set skip.val = true -%}
+                {%- endif -%}
+              {%- endif -%}
+            {%- endfor -%}
+            {%- if not skip.val -%}{%- set _ = to_remove.append({'name': name}) -%}{%- endif -%}
+          {%- endif -%}
+        {%- endfor -%}
+        {{ to_remove }}
+      loop_control:
+        label: "{{ item.name }}"
+
+- name: Prune unmanaged networks
+  when: apps_prune.networks | default(false)
+  block:
+    - name: List Docker networks
+      ansible.builtin.command: docker network ls --format '{% raw %}{{.Name}}{% endraw %}'
+      register: _apps_docker_networks
+      changed_when: false
+
+    - name: Remove unmanaged networks
+      community.docker.docker_network:
+        name: "{{ item }}"
+        state: absent
+        force: true
+      loop: "{{ _apps_docker_networks.stdout_lines | difference(_managed) }}"
+      vars:
+        _managed: "{{ (_apps_defined_networks | default([])) + (_apps_referenced_networks | default([])) + ['bridge', 'host', 'none'] }}"
+      failed_when: false

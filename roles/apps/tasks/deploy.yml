@@ -1,0 +1,131 @@
+---
+- name: Sort apps by dependencies
+  ansible.builtin.set_fact:
+    _apps_sorted: >-
+      {%- set result = [] -%}
+      {%- set resolved = [] -%}
+      {%- set max_iterations = apps_list | length + 1 -%}
+      {%- for _ in range(max_iterations) -%}
+        {%- for app in apps_list -%}
+          {%- if app.name not in resolved -%}
+            {%- set deps = app.depends_on | default([]) -%}
+            {%- set deps_met = deps | reject('in', resolved) | list | length == 0 -%}
+            {%- if deps_met -%}
+              {%- set _ = result.append(app) -%}
+              {%- set _ = resolved.append(app.name) -%}
+            {%- endif -%}
+          {%- endif -%}
+        {%- endfor -%}
+      {%- endfor -%}
+      {{ result }}
+
+- name: Verify all apps were sorted (no circular dependencies)
+  ansible.builtin.assert:
+    that:
+      - _apps_sorted | length == apps_list | length
+    fail_msg: >-
+      Circular dependency detected! Resolved {{ _apps_sorted | length }} of
+      {{ apps_list | length }} apps. Check depends_on configuration.
+    quiet: true
+
+- name: Fetch existing container configurations
+  community.docker.docker_container_info:
+    name: "{{ item.name }}"
+  register: _apps_existing_raw
+  loop: "{{ _apps_sorted }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: Build existing config lookup
+  ansible.builtin.set_fact:
+    _apps_existing_config: >-
+      {%- set config = {} -%}
+      {%- for result in _apps_existing_raw.results | default([]) -%}
+        {%- if result.exists | default(false) and result.container is defined -%}
+          {%- set c = result.container -%}
+          {%- set hc = c.HostConfig | default({}) -%}
+          {%- set cfg = c.Config | default({}) -%}
+          {%- set ns = c.NetworkSettings | default({}) -%}
+          {#- Parse environment -#}
+          {%- set env_dict = {} -%}
+          {%- for e in cfg.Env | default([]) -%}
+            {%- set kv = e.split('=', 1) -%}
+            {%- if kv | length == 2 -%}
+              {%- set _ = env_dict.update({kv[0]: kv[1]}) -%}
+            {%- endif -%}
+          {%- endfor -%}
+          {#- Parse networks -#}
+          {%- set net_list = [] -%}
+          {%- for net_name in ns.Networks | default({}) -%}
+            {%- set _ = net_list.append({'name': net_name}) -%}
+          {%- endfor -%}
+          {#- Parse ports -#}
+          {%- set port_list = [] -%}
+          {%- for port, bindings in (hc.PortBindings or {}) | items -%}
+            {%- for b in bindings | default([]) -%}
+              {%- set hip = b.HostIp | default('') -%}
+              {%- set hport = b.HostPort | default('') -%}
+              {%- if hip and hip != '0.0.0.0' and hip != '::' -%}
+                {%- set _ = port_list.append(hip ~ ':' ~ hport ~ ':' ~ port) -%}
+              {%- else -%}
+                {%- set _ = port_list.append(hport ~ ':' ~ port) -%}
+              {%- endif -%}
+            {%- endfor -%}
+          {%- endfor -%}
+          {#- Parse capabilities -#}
+          {%- set caps = {} -%}
+          {%- if hc.CapAdd | default([]) | length > 0 -%}
+            {%- set _ = caps.update({'add': hc.CapAdd}) -%}
+          {%- endif -%}
+          {%- if hc.CapDrop | default([]) | length > 0 -%}
+            {%- set _ = caps.update({'drop': hc.CapDrop}) -%}
+          {%- endif -%}
+          {#- Build entry -#}
+          {%- set tmpfs_list = [] -%}
+          {%- for tmpfs_path, tmpfs_opts in (hc.Tmpfs or {}) | items -%}
+            {%- if tmpfs_opts | default('') | length > 0 -%}
+              {%- set _ = tmpfs_list.append(tmpfs_path ~ ':' ~ tmpfs_opts) -%}
+            {%- else -%}
+              {%- set _ = tmpfs_list.append(tmpfs_path) -%}
+            {%- endif -%}
+          {%- endfor -%}
+          {%- set entry = {
+            'exists': true,
+            'command': cfg.Cmd,
+            'entrypoint': cfg.Entrypoint,
+            'user': cfg.User if cfg.User | default('') | length > 0 else none,
+            'working_dir': cfg.WorkingDir if cfg.WorkingDir | default('') | length > 0 else none,
+            'hostname': cfg.Hostname,
+            'ports': port_list,
+            'networks': net_list,
+            'dns': hc.Dns | default([]),
+            'volumes': hc.Binds | default([]),
+            'tmpfs': tmpfs_list,
+            'env': env_dict,
+            'labels': cfg.Labels | default({}),
+            'memory': hc.Memory | default(0),
+            'memory_swap': hc.MemorySwap | default(0),
+            'memory_reservation': hc.MemoryReservation | default(0),
+            'cpus': (hc.NanoCpus | default(0)) / 1000000000.0,
+            'healthcheck': cfg.Healthcheck,
+            'privileged': hc.Privileged | default(false),
+            'read_only': hc.ReadonlyRootfs | default(false),
+            'capabilities': caps if caps else none,
+            'security_opts': hc.SecurityOpt | default([]),
+            'log_driver': (hc.LogConfig or {}).get('Type'),
+            'log_options': (hc.LogConfig or {}).get('Config', {}),
+            'restart_policy': (hc.RestartPolicy or {}).get('Name')
+          } -%}
+          {%- set _ = config.update({result.item.name: entry}) -%}
+        {%- else -%}
+          {%- set _ = config.update({result.item.name: {'exists': false}}) -%}
+        {%- endif -%}
+      {%- endfor -%}
+      {{ config }}
+
+- name: Deploy containers in dependency order
+  ansible.builtin.include_tasks: container.yml
+  loop: "{{ _apps_sorted }}"
+  loop_control:
+    loop_var: _apps_app
+    label: "{{ _apps_app.name }}"

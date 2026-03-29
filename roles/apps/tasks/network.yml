@@ -1,0 +1,41 @@
+---
+- name: Collect network references
+  ansible.builtin.set_fact:
+    _apps_referenced_networks: >-
+      {{
+        apps_list
+        | selectattr('networks', 'defined')
+        | map(attribute='networks')
+        | flatten
+        | map(attribute='name')
+        | select('defined')
+        | unique
+        | list
+      }}
+    _apps_defined_networks: >-
+      {{ apps_networks | map(attribute='name') | list }}
+
+- name: Create explicitly defined Docker networks
+  community.docker.docker_network:
+    name: "{{ item.name }}"
+    state: present
+    driver: "{{ item.driver | default('bridge') }}"
+    internal: "{{ item.internal | default(false) }}"
+    ipam_config: >-
+      {{
+        [{'subnet': item.ipam.subnet, 'gateway': item.ipam.gateway | default(omit)}]
+        if (item.ipam is defined and item.ipam.subnet is defined)
+        else omit
+      }}
+  loop: "{{ apps_networks }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when: apps_networks | length > 0
+
+- name: Create auto-discovered Docker networks
+  community.docker.docker_network:
+    name: "{{ item }}"
+    state: present
+    driver: bridge
+  loop: "{{ _apps_referenced_networks | difference(_apps_defined_networks) }}"
+  when: _apps_referenced_networks | length > 0

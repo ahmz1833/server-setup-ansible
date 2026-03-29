@@ -1,0 +1,170 @@
+---
+# =============================================================================
+# APPS ROLE - Docker Container Lifecycle Manager
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# GLOBAL SETTINGS
+# -----------------------------------------------------------------------------
+
+# Base directory for application data
+# Each app gets: {{ apps_base_path }}/{{ app.name }}/
+apps_base_path: "/opt/apps"
+
+# Default container settings
+apps_default_restart_policy: "unless-stopped"
+apps_default_pull_policy: "missing"  # always, missing, never
+
+# Add management labels to identify Ansible-managed containers
+apps_management_labels_enabled: true
+
+# Preserve mode: omitted fields keep existing container values
+# Useful for CI/CD partial updates (e.g., only update image)
+# Can be overridden per-app with `preserve_mode: true/false`
+apps_preserve_mode: false
+
+# Default logging configuration
+apps_default_log_driver: "json-file"
+apps_default_log_options:
+  max-size: "50m"
+  max-file: "3"
+
+# -----------------------------------------------------------------------------
+# REGISTRIES - Private registry authentication
+# -----------------------------------------------------------------------------
+# Example:
+#   apps_registries:
+#     - registry: ghcr.io
+#       username: "{{ vault_user }}"
+#       password: "{{ vault_token }}"
+apps_registries: []
+
+# -----------------------------------------------------------------------------
+# NETWORKS - Docker network definitions
+# -----------------------------------------------------------------------------
+# Networks referenced by apps but not defined here are auto-created.
+# Example:
+#   apps_networks:
+#     - name: frontend
+#       driver: bridge
+#     - name: backend
+#       internal: true
+#       ipam:
+#         subnet: "172.25.0.0/24"
+#         gateway: "172.25.0.1"
+apps_networks: []
+
+# -----------------------------------------------------------------------------
+# CONTAINERS - Application definitions
+# -----------------------------------------------------------------------------
+# Full schema:
+#   apps_list:
+#     - name: myapp                        # Required: container name
+#       image: nginx:latest                # Required: Docker image
+#       state: started                     # started, stopped, absent
+#       preserve_mode: false               # Override global preserve_mode
+#
+#       # Execution
+#       command: ["nginx", "-g", "daemon off;"]
+#       entrypoint: ["/docker-entrypoint.sh"]
+#       user: "1000:1000"
+#       working_dir: /app
+#       hostname: myapp
+#
+#       # Networking
+#       ports:
+#         - "8080:80"
+#         - "127.0.0.1:9000:9000"
+#       networks:
+#         - name: frontend
+#         - name: backend
+#           ipv4_address: "172.25.0.10"
+#       dns: ["8.8.8.8", "8.8.4.4"]
+#
+#       # Storage (relative paths resolved to apps_base_path/{name}/)
+#       volumes:
+#         - "./data:/app/data"
+#         - "myapp_cache:/cache"
+#         - "/etc/localtime:/etc/localtime:ro"
+#       tmpfs: ["/tmp", "/run"]
+#
+#       # Directory ownership (for app directory)
+#       dir_owner: "1000"
+#       dir_group: "1000"
+#       dir_mode: "0755"
+#
+#       # Environment
+#       env:
+#         NODE_ENV: production
+#         DATABASE_URL: "postgres://..."
+#
+#       # Resources
+#       memory: "512m"
+#       memory_swap: "1g"
+#       memory_reservation: "256m"
+#       cpus: 1.5
+#
+#       # Health check
+#       healthcheck:
+#         test: ["CMD", "curl", "-f", "http://localhost/health"]
+#         interval: 30s
+#         timeout: 10s
+#         retries: 3
+#         start_period: 60s
+#       healthcheck_wait: true             # Wait for healthy before continuing
+#       healthcheck_wait_timeout: 300      # Max seconds to wait
+#
+#       # Security
+#       privileged: false
+#       read_only: false
+#       capabilities:
+#         add: [NET_ADMIN]
+#         drop: [MKNOD, SYS_CHROOT]
+#       security_opts: ["no-new-privileges:true"]
+#
+#       # Logging
+#       log_driver: json-file
+#       log_options:
+#         max-size: "100m"
+#         max-file: "5"
+#
+#       # Lifecycle
+#       pull: missing                      # always, missing, never
+#       restart_policy: unless-stopped     # no, always, on-failure, unless-stopped
+#       recreate: false                    # Force container recreation
+#       restart: false                     # Force container restart
+#
+#       # Dependencies (these containers start first)
+#       depends_on: [postgres, redis]
+#
+#       # Custom labels (merged with management labels)
+#       labels:
+#         traefik.enable: "true"
+#         prometheus.scrape: "true"
+
+apps_list: []
+
+# -----------------------------------------------------------------------------
+# PRUNE SETTINGS - Cleanup unmanaged resources
+# -----------------------------------------------------------------------------
+# WARNING: Enable with caution. Removes containers/networks not in apps_list.
+
+apps_prune:
+  # Master switch (default: opposite of preserve_mode for safety)
+  enabled: false
+
+  # What to prune
+  containers: true
+  networks: false
+
+  # Container name patterns to never prune (regex)
+  whitelist_patterns:
+    - "^sandbox-.*$"
+
+  # Containers with matching labels are protected.
+  # Each item can be either:
+  #   - a string label key, e.g. "com.example.keep"
+  #   - a dict with exact key/value match, e.g.
+  #       key: "com.example.role"
+  #       value: "system"
+  whitelist_labels: []

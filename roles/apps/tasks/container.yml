@@ -1,0 +1,261 @@
+---
+- name: "Deploy container: {{ _apps_app.name }}"
+  community.docker.docker_container:
+    name: "{{ _apps_app.name }}"
+    image: "{{ _apps_app.image }}"
+    state: "{{ _apps_app.state | default('started') }}"
+
+    # Execution
+    command: "{{ _cfg.command }}"
+    entrypoint: "{{ _cfg.entrypoint }}"
+    user: "{{ _cfg.user }}"
+    working_dir: "{{ _cfg.working_dir }}"
+    hostname: "{{ _cfg.hostname }}"
+
+    # Networking
+    ports: "{{ _cfg.ports }}"
+    networks: "{{ _cfg.networks }}"
+    dns_servers: "{{ _cfg.dns }}"
+
+    # Storage
+    volumes: "{{ _cfg.volumes }}"
+    tmpfs: "{{ _cfg.tmpfs }}"
+
+    # Environment
+    env: "{{ _cfg.env }}"
+
+    # Resources
+    memory: "{{ _cfg.memory }}"
+    memory_swap: "{{ _cfg.memory_swap }}"
+    memory_reservation: "{{ _cfg.memory_reservation }}"
+    cpus: "{{ _cfg.cpus }}"
+
+    # Health
+    healthcheck: "{{ _cfg.healthcheck }}"
+
+    # Security
+    privileged: "{{ _cfg.privileged }}"
+    read_only: "{{ _cfg.read_only }}"
+    capabilities: "{{ _cfg.capabilities }}"
+    security_opts: "{{ _cfg.security_opts }}"
+
+    # Logging
+    log_driver: "{{ _cfg.log_driver }}"
+    log_options: "{{ _cfg.log_options }}"
+
+    # Lifecycle
+    pull: >-
+      {{
+        'always' if _apps_app.pull | default(apps_default_pull_policy) in [true, 'always']
+        else ('never' if _apps_app.pull | default(apps_default_pull_policy) == 'never'
+        else 'missing')
+      }}
+    restart_policy: "{{ _cfg.restart_policy }}"
+    recreate: "{{ _apps_app.recreate | default(false) }}"
+    restart: "{{ _apps_app.restart | default(false) }}"
+
+    # Labels
+    labels: "{{ _cfg.labels }}"
+
+    # Comparison settings for idempotency
+    comparisons:
+      image: strict
+      env: strict
+      labels: allow_more_present
+      volumes: allow_more_present
+      networks: allow_more_present
+  vars:
+    _preserve: "{{ _apps_app.preserve_mode | default(apps_preserve_mode) | bool }}"
+    _existing: "{{ _apps_existing_config.get(_apps_app.name, {}) }}"
+    _has_existing: "{{ _existing.get('exists', false) }}"
+    _base: "{{ apps_base_path }}/{{ _apps_app.name }}/"
+
+    # Resolve relative volume paths
+    _resolved_volumes: >-
+      {%- if _apps_app.volumes is defined -%}
+        {%- set vols = [] -%}
+        {%- for v in _apps_app.volumes -%}
+          {%- set parts = v.split(':') -%}
+          {%- set src = _base ~ parts[0][2:] if parts[0].startswith('./') else parts[0] -%}
+          {%- set _ = vols.append(src ~ ':' ~ (parts[1:] | join(':'))) -%}
+        {%- endfor -%}
+        {{ vols }}
+      {%- else -%}
+        {{ none }}
+      {%- endif -%}
+
+    # Build final config with preserve logic
+    _cfg:
+      # Execution
+      command: >-
+        {{ _apps_app.command | default(
+          _existing.command if (_preserve and _has_existing and _existing.command) else omit
+        ) }}
+      entrypoint: >-
+        {{ _apps_app.entrypoint | default(
+          _existing.entrypoint if (_preserve and _has_existing and _existing.entrypoint) else omit
+        ) }}
+      user: >-
+        {{ _apps_app.user | default(
+          _existing.user if (_preserve and _has_existing and _existing.user) else omit
+        ) }}
+      working_dir: >-
+        {{ _apps_app.working_dir | default(
+          _existing.working_dir if (_preserve and _has_existing and _existing.working_dir) else omit
+        ) }}
+      hostname: >-
+        {{ _apps_app.hostname | default(
+          _existing.hostname if (_preserve and _has_existing and _existing.hostname) else omit
+        ) }}
+
+      # Networking
+      ports: >-
+        {{
+          _apps_app.ports
+          if _apps_app.ports is defined
+          else (_existing.ports if (_preserve and _has_existing and _existing.ports | length > 0) else omit)
+        }}
+      networks: >-
+        {{
+          _apps_app.networks
+          if _apps_app.networks is defined
+          else (_existing.networks if (_preserve and _has_existing and _existing.networks | length > 0) else omit)
+        }}
+      dns: >-
+        {{
+          _apps_app.dns
+          if _apps_app.dns is defined
+          else (_existing.dns if (_preserve and _has_existing and _existing.dns | length > 0) else omit)
+        }}
+
+      # Storage
+      volumes: >-
+        {{
+          _resolved_volumes
+          if _resolved_volumes
+          else (_existing.volumes if (_preserve and _has_existing and _existing.volumes | length > 0) else omit)
+        }}
+      tmpfs: >-
+        {{
+          _apps_app.tmpfs
+          if _apps_app.tmpfs is defined
+          else (_existing.tmpfs if (_preserve and _has_existing and _existing.tmpfs | length > 0) else omit)
+        }}
+
+      # Environment (merged when preserve mode)
+      env: >-
+        {%- set base = _existing.env if (_preserve and _has_existing) else {} -%}
+        {%- set user_env = _apps_app.env | default({}) -%}
+        {%- set merged = base | combine(user_env) -%}
+        {%- if merged | length > 0 -%}{{ merged }}{%- else -%}{{ omit }}{%- endif -%}
+
+      # Resources
+      memory: >-
+        {{
+          _apps_app.memory
+          if _apps_app.memory is defined
+          else (_existing.memory if (_preserve and _has_existing and _existing.memory | int > 0) else omit)
+        }}
+      memory_swap: >-
+        {{
+          _apps_app.memory_swap
+          if _apps_app.memory_swap is defined
+          else (_existing.memory_swap if (_preserve and _has_existing and _existing.memory_swap | int > 0) else omit)
+        }}
+      memory_reservation: >-
+        {{
+          _apps_app.memory_reservation
+          if _apps_app.memory_reservation is defined
+          else (
+            _existing.memory_reservation
+            if (_preserve and _has_existing and _existing.memory_reservation | int > 0)
+            else omit
+          )
+        }}
+      cpus: >-
+        {{
+          _apps_app.cpus
+          if _apps_app.cpus is defined
+          else (_existing.cpus if (_preserve and _has_existing and _existing.cpus | float > 0) else omit)
+        }}
+
+      # Health
+      healthcheck: >-
+        {{
+          _apps_app.healthcheck
+          if _apps_app.healthcheck is defined
+          else (_existing.healthcheck if (_preserve and _has_existing and _existing.healthcheck) else omit)
+        }}
+
+      # Security
+      privileged: "{{ _apps_app.privileged | default(_existing.privileged if (_preserve and _has_existing) else false) }}"
+      read_only: "{{ _apps_app.read_only | default(_existing.read_only if (_preserve and _has_existing) else false) }}"
+      capabilities: >-
+        {{
+          _apps_app.capabilities
+          if _apps_app.capabilities is defined
+          else (_existing.capabilities if (_preserve and _has_existing and _existing.capabilities) else omit)
+        }}
+      security_opts: >-
+        {{
+          _apps_app.security_opts
+          if _apps_app.security_opts is defined
+          else (_existing.security_opts if (_preserve and _has_existing and _existing.security_opts | length > 0) else omit)
+        }}
+
+      # Logging
+      log_driver: >-
+        {{
+          _apps_app.log_driver
+          if _apps_app.log_driver is defined
+          else (_existing.log_driver if (_preserve and _has_existing and _existing.log_driver) else apps_default_log_driver)
+        }}
+      log_options: >-
+        {{
+          _apps_app.log_options
+          if _apps_app.log_options is defined
+          else (
+            _existing.log_options
+            if (_preserve and _has_existing and _existing.log_options | length > 0)
+            else apps_default_log_options
+          )
+        }}
+
+      # Lifecycle
+      restart_policy: >-
+        {{
+          _apps_app.restart_policy
+          if _apps_app.restart_policy is defined
+          else (
+            _existing.restart_policy
+            if (_preserve and _has_existing and _existing.restart_policy)
+            else apps_default_restart_policy
+          )
+        }}
+
+      # Labels (always merged: management + existing + user)
+      labels: >-
+        {%- set mgmt = {'apps.ansible.managed': 'true', 'apps.ansible.name': _apps_app.name}
+            if apps_management_labels_enabled else {} -%}
+        {%- set base = _existing.labels | default({}) if (_preserve and _has_existing) else {} -%}
+        {%- set user = _apps_app.labels | default({}) -%}
+        {{ mgmt | combine(base) | combine(user) }}
+  register: _apps_app_deploy_result
+
+# WAIT FOR HEALTHY (after each container, respecting dependencies)
+- name: "Wait for healthy: {{ _apps_app.name }}"
+  community.docker.docker_container_info:
+    name: "{{ _apps_app.name }}"
+  register: _apps_app_health_check
+  until: >-
+    _apps_app_health_check.container.State.Health.Status | default('none') in ['healthy', 'none']
+  retries: "{{ (_apps_app.healthcheck_wait_timeout | default(300) / 5) | int }}"
+  delay: 5
+  when:
+    - _apps_app.state | default('started') == 'started'
+    - _apps_app.healthcheck_wait | default(true) | bool
+    - _apps_app.healthcheck is defined or (_preserve and _has_existing and _existing.healthcheck)
+  vars:
+    _preserve: "{{ _apps_app.preserve_mode | default(apps_preserve_mode) | bool }}"
+    _existing: "{{ _apps_existing_config.get(_apps_app.name, {}) }}"
+    _has_existing: "{{ _existing.get('exists', false) }}"

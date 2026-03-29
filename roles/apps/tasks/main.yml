@@ -1,115 +1,17 @@
 ---
-# Ansible tasks for managing applications as Docker containers.
-# It might be used in CI/CD pipelines or regular server maintenance
-# to ensure that the desired applications are running as expected.
-#
-# Variables Expected:
-# - apps_base_path: Base directory for applications (default: /opt/apps)
-# - apps_to_deploy: List of applications to deploy with their configurations
-# - apps_prune_enabled: Whether to prune unmanaged containers (default: false)
-# - apps_prune_whitelist: List of regex patterns for container names to exclude from pruning
-#     (It always whitelists '^sandbox-.*$' to protect sandbox containers)
-#
-# apps_to_deploy fields:
-#   - name:                       Container name
-#   - image:                      Docker image to use
-#   - state:          [Optional]  Desired state (started, stopped, absent)
-#   - restart_policy: [Optional]  Restart policy for the container
-#   - ports:          [Optional]  List of port mappings
-#   - volumes:        [Optional]  List of volume mappings (relative paths will be resolved under apps_base_path/{name}/)
-#   - env:            [Optional]  Environment variables for the container
-#   - networks:       [Optional]  List of networks to connect to (requires 'name' key)
-#   - labels:         [Optional]  Labels for the container
-#   - pull:           [Optional]  Whether to pull the image before creating the container
+- name: Validate, prepare and login registries
+  ansible.builtin.include_tasks: prepare.yml
+  tags: [apps, ci-cd, deploy]
 
-- name: Ensure base applications directory exists
-  ansible.builtin.file:
-    path: "{{ apps_base_path | default('/opt/apps') }}"
-    state: directory
-    mode: '0755'
+- name: Provision Docker networks
+  ansible.builtin.include_tasks: network.yml
+  tags: [apps, ci-cd, deploy]
 
-- name: Create specific directories for apps
-  ansible.builtin.file:
-    path: "{{ apps_base_path | default('/opt/apps') }}/{{ item.name }}"
-    state: directory
-    mode: '0755'
-  loop: "{{ apps_to_deploy | default([]) }}"
-  when: item.state | default('started') != 'absent'
+- name: Deploy containers
+  ansible.builtin.include_tasks: deploy.yml
+  tags: [apps, ci-cd, deploy]
 
-- name: Ensure required Docker networks exist
-  community.docker.docker_network:
-    name: "{{ item }}"
-    state: present
-  loop: >-
-    {{
-      (apps_to_deploy | default([]))
-      | selectattr('networks', 'defined')
-      | map(attribute='networks')
-      | flatten
-      | map(attribute='name')
-      | select('defined')
-      | unique
-      | list
-    }}
-
-- name: Reconcile Docker containers state
-  community.docker.docker_container:
-    name: "{{ item.name }}"
-    image: "{{ item.image }}"
-    state: "{{ item.state | default('started') }}"
-    restart_policy: "{{ item.restart_policy | default('unless-stopped') }}"
-    ports: "{{ item.ports | default([]) }}"
-    volumes: >-
-      {%- set _vols = [] -%}
-      {%- set _base = (apps_base_path | default('/opt/apps')) ~ '/' ~ item.name ~ '/' -%}
-      {%- for v in item.volumes | default([]) -%}
-        {%- if v.startswith('./') -%}
-          {%- set _ = _vols.append(_base ~ v[2:]) -%}
-        {%- else -%}
-          {%- set _ = _vols.append(v) -%}
-        {%- endif -%}
-      {%- endfor -%}
-      {{ _vols }}
-    env: "{{ item.env | default({}) }}"
-    networks: "{{ item.networks | default([]) }}"
-    labels: "{{ item.labels | default({}) }}"
-    pull: "{{ item.pull | default(false) }}"
-    recreate: true
-  loop: "{{ apps_to_deploy | default([]) }}"
-  loop_control:
-    label: "{{ item.name }}"
-
-- name: Prune unmanaged containers
-  when: apps_prune_enabled | default(false)
-  block:
-    - name: Get all existing containers
-      ansible.builtin.command: "docker ps -a --format '{% raw %}{{.Names}}{% endraw %}'"
-      register: apps_docker_all_containers
-      changed_when: false
-
-    - name: Determine containers to remove
-      ansible.builtin.set_fact:
-        apps_containers_to_remove: >-
-          {%- set _apps_to_remove = [] -%}
-          {%- set _apps_managed = (apps_to_deploy | default([])) | map(attribute='name') | list -%}
-          {%- set _apps_whitelist = ['^sandbox-.*$'] + (apps_prune_whitelist | default([])) -%}
-          {%- for c in (apps_docker_all_containers.stdout_lines | default([])) -%}
-            {%- if c not in _apps_managed -%}
-              {%- set _apps_matched = false -%}
-              {%- for w in _apps_whitelist -%}
-                {%- if c is match(w) -%}
-                  {%- set _apps_matched = true -%}
-                {%- endif -%}
-              {%- endfor -%}
-              {%- if not _apps_matched -%}
-                {%- set _ = _apps_to_remove.append(c) -%}
-              {%- endif -%}
-            {%- endif -%}
-          {%- endfor -%}
-          {{ _apps_to_remove | to_json }}
-
-    - name: Remove unmanaged containers
-      community.docker.docker_container:
-        name: "{{ item }}"
-        state: absent
-      loop: "{{ apps_containers_to_remove | default('[]') | from_json }}"
+- name: Prune unmanaged resources
+  ansible.builtin.include_tasks: prune.yml
+  when: apps_prune.enabled | default(false) | bool
+  tags: [apps, apps-prune]
