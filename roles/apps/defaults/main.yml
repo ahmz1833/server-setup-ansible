@@ -161,5 +161,10 @@ apps_prune:
   whitelist_patterns:
     - "^sandbox-.*$"
 
-  # Containers with these label keys are protected
+  # Containers with matching labels are protected.
+  # Each item can be either:
+  #   - a string label key, e.g. "com.example.keep"
+  #   - a dict with exact key/value match, e.g.
+  #       key: "com.example.role"
+  #       value: "system"
   whitelist_labels: []

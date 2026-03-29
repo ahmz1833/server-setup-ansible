@@ -16,6 +16,7 @@
         {%- set to_remove = [] -%}
         {%- set managed = apps_list | map(attribute='name') | list -%}
         {%- set patterns = ['^sandbox-.*$'] + (apps_prune.whitelist_patterns | default([])) -%}
+        {%- set whitelist_labels = apps_prune.whitelist_labels | default([]) -%}
         {%- for c in _apps_docker_info.containers | default([]) -%}
           {%- set name = c.Names[0] | regex_replace('^/', '') -%}
           {%- if name not in managed -%}
@@ -24,8 +25,14 @@
             {%- for p in patterns -%}
               {%- if name is match(p) -%}{%- set skip.val = true -%}{%- endif -%}
             {%- endfor -%}
-            {%- for l in apps_prune.whitelist_labels | default([]) -%}
-              {%- if l in labels.keys() -%}{%- set skip.val = true -%}{%- endif -%}
+            {%- for label_rule in whitelist_labels -%}
+              {%- if label_rule is string -%}
+                {%- if label_rule in labels.keys() -%}{%- set skip.val = true -%}{%- endif -%}
+              {%- elif label_rule is mapping and label_rule.key is defined -%}
+                {%- if labels.get(label_rule.key) == (label_rule.value | string) -%}
+                  {%- set skip.val = true -%}
+                {%- endif -%}
+              {%- endif -%}
             {%- endfor -%}
             {%- if not skip.val -%}{%- set _ = to_remove.append({'name': name}) -%}{%- endif -%}
           {%- endif -%}
