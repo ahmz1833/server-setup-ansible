@@ -13,7 +13,7 @@
 
 - name: Get current epoch for backup suffix
   ansible.builtin.set_fact:
-    nginx_backup_epoch: "{{ ansible_date_time.epoch }}"
+    nginx_backup_epoch: "{{ ansible_facts['date_time']['epoch'] }}"
   when: nginx_backup_enabled | default(true)
 
 - name: Backup nginx.conf before modification
