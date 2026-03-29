@@ -60,7 +60,7 @@
 - name: Backup sshd_config before modification
   ansible.builtin.copy:
     src: /etc/ssh/sshd_config
-    dest: "/etc/ssh/sshd_config.bak.{{ ansible_date_time.epoch }}"
+    dest: "/etc/ssh/sshd_config.bak.{{ ansible_facts['date_time']['epoch'] }}"
     remote_src: true
     force: false
     owner: root
@@ -80,7 +80,7 @@
 - name: Backup extra SSH configuration files
   ansible.builtin.copy:
     src: "{{ item.path }}"
-    dest: "/etc/ssh/sshd_config.d_{{ item.path | basename }}.bak.{{ ansible_date_time.epoch }}"
+    dest: "/etc/ssh/sshd_config.d_{{ item.path | basename }}.bak.{{ ansible_facts['date_time']['epoch'] }}"
     remote_src: true
     force: false
     owner: root

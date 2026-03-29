@@ -81,7 +81,7 @@
     - name: Backup APT source files before modification
       ansible.builtin.copy:
         src: "{{ item.path }}"
-        dest: "/etc/apt/{{ item.path | basename }}.bak.{{ ansible_date_time.epoch }}"
+        dest: "/etc/apt/{{ item.path | basename }}.bak.{{ ansible_facts['date_time']['epoch'] }}"
         remote_src: true
         force: false
         owner: root
