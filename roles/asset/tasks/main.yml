@@ -56,9 +56,11 @@
               {%- if (asset_type | default('binary')) == 'binary'
                     and _asset_version_binary is defined -%}
                 {{
-                  (_asset_version_binary.stdout | default('')
-                  ~ _asset_version_binary.stderr | default(''))
-                  | regex_search(asset_version_regex, '\1')
+                  (
+                    (_asset_version_binary.stdout | default(''))
+                    ~ (_asset_version_binary.stderr | default(''))
+                  )
+                  | regex_findall(asset_version_regex)
                   | first
                   | default('')
                 }}
