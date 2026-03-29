@@ -1,0 +1,85 @@
+---
+# -----------------------------------------------------------------------------
+# VALIDATION
+# -----------------------------------------------------------------------------
+- name: Validate app definitions
+  ansible.builtin.assert:
+    that:
+      - item.name is defined
+      - item.name is match('^[a-zA-Z0-9][a-zA-Z0-9_.-]*$')
+      - item.image is defined
+      - item.image | length > 0
+      - item.state | default('started') in ['started', 'stopped', 'absent']
+    fail_msg: >-
+      Invalid app '{{ item.name | default('UNNAMED') }}':
+      name must be alphanumeric (with . - _), image required,
+      state must be started/stopped/absent
+    quiet: true
+  loop: "{{ apps_list }}"
+  loop_control:
+    label: "{{ item.name | default('UNNAMED') }}"
+
+- name: Check for duplicate app names
+  ansible.builtin.assert:
+    that:
+      - apps_list | map(attribute='name') | list | length ==
+        apps_list | map(attribute='name') | unique | list | length
+    fail_msg: "Duplicate app names detected in apps_list"
+    quiet: true
+  when: apps_list | length > 1
+
+- name: Validate depends_on references
+  ansible.builtin.assert:
+    that:
+      - item.1 in (apps_list | map(attribute='name') | list)
+    fail_msg: "App '{{ item.0.name }}' depends on '{{ item.1 }}' which is not defined"
+    quiet: true
+  loop: "{{ apps_list | subelements('depends_on', skip_missing=true) }}"
+  loop_control:
+    label: "{{ item.0.name }} -> {{ item.1 }}"
+
+# -----------------------------------------------------------------------------
+# DIRECTORIES
+# -----------------------------------------------------------------------------
+- name: Ensure base applications directory exists
+  ansible.builtin.file:
+    path: "{{ apps_base_path }}"
+    state: directory
+    mode: "0755"
+    owner: root
+    group: root
+
+- name: Create application directories
+  ansible.builtin.file:
+    path: "{{ apps_base_path }}/{{ item.name }}"
+    state: directory
+    mode: "{{ item.dir_mode | default('0755') }}"
+    owner: "{{ item.dir_owner | default('root') }}"
+    group: "{{ item.dir_group | default('root') }}"
+  loop: >-
+    {{
+      apps_list
+      | rejectattr('state', 'defined')
+      | list
+      + apps_list
+      | selectattr('state', 'defined')
+      | rejectattr('state', 'equalto', 'absent')
+      | list
+    }}
+  loop_control:
+    label: "{{ item.name }}"
+
+# -----------------------------------------------------------------------------
+# REGISTRIES
+# -----------------------------------------------------------------------------
+- name: Login to private Docker registries
+  community.docker.docker_login:
+    registry_url: "{{ item.registry }}"
+    username: "{{ item.username }}"
+    password: "{{ item.password }}"
+    reauthorize: "{{ item.reauthorize | default(false) }}"
+  loop: "{{ apps_registries }}"
+  loop_control:
+    label: "{{ item.registry }}"
+  no_log: true
+  when: apps_registries | length > 0

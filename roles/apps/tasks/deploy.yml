@@ -1,0 +1,388 @@
+---
+# -----------------------------------------------------------------------------
+# CONTAINERS - Sort by Dependencies
+# -----------------------------------------------------------------------------
+- name: Sort apps by dependencies
+  ansible.builtin.set_fact:
+    _apps_sorted: >-
+      {%- set result = [] -%}
+      {%- set resolved = [] -%}
+      {%- for _ in range(apps_list | length + 1) -%}
+        {%- for app in apps_list if app.name not in resolved -%}
+          {%- set deps_met = true -%}
+          {%- for dep in app.depends_on | default([]) -%}
+            {%- if dep not in resolved -%}{%- set deps_met = false -%}{%- endif -%}
+          {%- endfor -%}
+          {%- if deps_met -%}
+            {%- set _ = result.append(app) -%}
+            {%- set _ = resolved.append(app.name) -%}
+          {%- endif -%}
+        {%- endfor -%}
+      {%- endfor -%}
+      {{ result }}
+
+# -----------------------------------------------------------------------------
+# CONTAINERS - Fetch Existing Config (for preserve mode)
+# -----------------------------------------------------------------------------
+- name: Fetch existing container configurations
+  community.docker.docker_container_info:
+    name: "{{ item.name }}"
+  register: _apps_existing_containers
+  loop: "{{ _apps_sorted }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when: apps_preserve_mode
+
+- name: Build existing config lookup
+  ansible.builtin.set_fact:
+    _apps_existing_config: >-
+      {%- set config = {} -%}
+      {%- for result in _apps_existing_containers.results | default([]) -%}
+        {%- if result.container is defined and result.exists | default(false) -%}
+          {%- set c = result.container -%}
+          {%- set hc = c.HostConfig | default({}) -%}
+          {%- set cfg = c.Config | default({}) -%}
+          {#- Parse environment variables -#}
+          {%- set env_dict = {} -%}
+          {%- for e in cfg.Env | default([]) -%}
+            {%- set parts = e.split('=', 1) -%}
+            {%- if parts | length == 2 -%}
+              {%- set _ = env_dict.update({parts[0]: parts[1]}) -%}
+            {%- endif -%}
+          {%- endfor -%}
+          {#- Parse networks -#}
+          {%- set net_list = [] -%}
+          {%- for net_name in c.NetworkSettings.Networks | default({}) -%}
+            {%- set _ = net_list.append({'name': net_name}) -%}
+          {%- endfor -%}
+          {#- Parse ports -#}
+          {%- set port_list = [] -%}
+          {%- for port, bindings in hc.PortBindings | default({}) | items -%}
+            {%- for b in bindings | default([]) -%}
+              {%- set host_ip = b.HostIp | default('') -%}
+              {%- set host_port = b.HostPort | default('') -%}
+              {%- if host_ip and host_ip != '0.0.0.0' -%}
+                {%- set _ = port_list.append(host_ip ~ ':' ~ host_port ~ ':' ~ port) -%}
+              {%- else -%}
+                {%- set _ = port_list.append(host_port ~ ':' ~ port) -%}
+              {%- endif -%}
+            {%- endfor -%}
+          {%- endfor -%}
+          {#- Parse capabilities -#}
+          {%- set caps = {} -%}
+          {%- if hc.CapAdd | default([]) | length > 0 -%}
+            {%- set _ = caps.update({'add': hc.CapAdd}) -%}
+          {%- endif -%}
+          {%- if hc.CapDrop | default([]) | length > 0 -%}
+            {%- set _ = caps.update({'drop': hc.CapDrop}) -%}
+          {%- endif -%}
+          {#- Build config entry -#}
+          {%- set _ = config.update({
+            result.item.name: {
+              'command': cfg.Cmd | default(none),
+              'entrypoint': cfg.Entrypoint | default(none),
+              'user': cfg.User | default(none) if cfg.User | default('') | length > 0 else none,
+              'working_dir': cfg.WorkingDir | default(none) if cfg.WorkingDir | default('') | length > 0 else none,
+              'hostname': cfg.Hostname | default(none),
+              'volumes': hc.Binds | default([]),
+              'ports': port_list,
+              'networks': net_list,
+              'env': env_dict,
+              'labels': cfg.Labels | default({}),
+              'dns': hc.Dns | default([]),
+              'tmpfs': hc.Tmpfs | default({}) | list,
+              'memory': hc.Memory | default(0),
+              'memory_swap': hc.MemorySwap | default(0),
+              'memory_reservation': hc.MemoryReservation | default(0),
+              'cpus': (hc.NanoCpus | default(0) / 1000000000),
+              'healthcheck': cfg.Healthcheck | default(none),
+              'privileged': hc.Privileged | default(false),
+              'read_only': hc.ReadonlyRootfs | default(false),
+              'capabilities': caps if caps | length > 0 else none,
+              'security_opts': hc.SecurityOpt | default([]),
+              'log_driver': hc.LogConfig.Type | default(none) if hc.LogConfig is defined else none,
+              'log_options': hc.LogConfig.Config | default({}) if hc.LogConfig is defined else {},
+              'restart_policy': hc.RestartPolicy.Name | default(none) if hc.RestartPolicy is defined else none
+            }
+          }) -%}
+        {%- endif -%}
+      {%- endfor -%}
+      {{ config }}
+  when: apps_preserve_mode
+
+# -----------------------------------------------------------------------------
+# CONTAINERS - Deploy
+# -----------------------------------------------------------------------------
+- name: Manage Docker containers
+  community.docker.docker_container:
+    name: "{{ item.name }}"
+    image: "{{ item.image }}"
+    state: "{{ item.state | default('started') }}"
+
+    # Execution
+    command: "{{ _cfg.command }}"
+    entrypoint: "{{ _cfg.entrypoint }}"
+    user: "{{ _cfg.user }}"
+    working_dir: "{{ _cfg.working_dir }}"
+    hostname: "{{ _cfg.hostname }}"
+
+    # Networking
+    ports: "{{ _cfg.ports }}"
+    networks: "{{ _cfg.networks }}"
+    dns_servers: "{{ _cfg.dns }}"
+
+    # Storage
+    volumes: "{{ _cfg.volumes }}"
+    tmpfs: "{{ _cfg.tmpfs }}"
+
+    # Environment
+    env: "{{ _cfg.env }}"
+
+    # Resources
+    memory: "{{ _cfg.memory }}"
+    memory_swap: "{{ _cfg.memory_swap }}"
+    memory_reservation: "{{ _cfg.memory_reservation }}"
+    cpus: "{{ _cfg.cpus }}"
+
+    # Health
+    healthcheck: "{{ _cfg.healthcheck }}"
+
+    # Security
+    privileged: "{{ _cfg.privileged }}"
+    read_only: "{{ _cfg.read_only }}"
+    capabilities: "{{ _cfg.capabilities }}"
+    security_opts: "{{ _cfg.security_opts }}"
+
+    # Logging
+    log_driver: "{{ _cfg.log_driver }}"
+    log_options: "{{ _cfg.log_options }}"
+
+    # Lifecycle
+    pull: "{{ 'always' if item.pull | default(apps_default_pull_policy) in [true, 'always']
+              else ('never' if item.pull | default(apps_default_pull_policy) == 'never' else 'missing') }}"
+    restart_policy: "{{ _cfg.restart_policy }}"
+    recreate: "{{ item.recreate | default(false) }}"
+    restart: "{{ item.restart | default(false) }}"
+
+    # Labels
+    labels: "{{ _cfg.labels }}"
+
+    comparisons:
+      image: strict
+      env: strict
+      labels: allow_more_present
+      volumes: allow_more_present
+  vars:
+    _preserve: "{{ item.preserve_mode | default(apps_preserve_mode) | bool }}"
+    _existing: "{{ _apps_existing_config.get(item.name, {}) }}"
+    _base: "{{ apps_base_path }}/{{ item.name }}/"
+
+    # Helper to resolve relative volume paths
+    _resolved_volumes: >-
+      {%- if item.volumes is defined -%}
+        {%- set vols = [] -%}
+        {%- for v in item.volumes -%}
+          {%- set parts = v.split(':') -%}
+          {%- set src = _base ~ parts[0][2:] if parts[0].startswith('./') else parts[0] -%}
+          {%- set _ = vols.append(src ~ ':' ~ parts[1:] | join(':')) -%}
+        {%- endfor -%}
+        {{ vols }}
+      {%- else -%}
+        {{ none }}
+      {%- endif -%}
+
+    # Build merged config
+    _cfg:
+      # --- Execution ---
+      command: >-
+        {{ item.command | default((_existing.command if _preserve and _existing.command else none) | default(omit, true)) }}
+      entrypoint: >-
+        {{ item.entrypoint | default((_existing.entrypoint if _preserve and _existing.entrypoint else none) | default(omit, true)) }}
+      user: >-
+        {{ item.user | default((_existing.user if _preserve and _existing.user else none) | default(omit, true)) }}
+      working_dir: >-
+        {{ item.working_dir | default((_existing.working_dir if _preserve and _existing.working_dir else none) | default(omit, true)) }}
+      hostname: >-
+        {{ item.hostname | default((_existing.hostname if _preserve and _existing.hostname else none) | default(omit, true)) }}
+
+      # --- Networking ---
+      ports: >-
+        {%- if item.ports is defined -%}
+          {{ item.ports }}
+        {%- elif _preserve and _existing.ports | default([]) | length > 0 -%}
+          {{ _existing.ports }}
+        {%- else -%}
+          {{ omit }}
+        {%- endif -%}
+      networks: >-
+        {%- if item.networks is defined -%}
+          {{ item.networks }}
+        {%- elif _preserve and _existing.networks | default([]) | length > 0 -%}
+          {{ _existing.networks }}
+        {%- else -%}
+          {{ omit }}
+        {%- endif -%}
+      dns: >-
+        {%- if item.dns is defined -%}
+          {{ item.dns }}
+        {%- elif _preserve and _existing.dns | default([]) | length > 0 -%}
+          {{ _existing.dns }}
+        {%- else -%}
+          {{ omit }}
+        {%- endif -%}
+
+      # --- Storage ---
+      volumes: >-
+        {%- if _resolved_volumes -%}
+          {{ _resolved_volumes }}
+        {%- elif _preserve and _existing.volumes | default([]) | length > 0 -%}
+          {{ _existing.volumes }}
+        {%- else -%}
+          {{ omit }}
+        {%- endif -%}
+      tmpfs: >-
+        {%- if item.tmpfs is defined -%}
+          {{ item.tmpfs }}
+        {%- elif _preserve and _existing.tmpfs | default([]) | length > 0 -%}
+          {{ _existing.tmpfs }}
+        {%- else -%}
+          {{ omit }}
+        {%- endif -%}
+
+      # --- Environment (merged in preserve mode) ---
+      env: >-
+        {%- if item.env is defined -%}
+          {%- if _preserve and _existing.env | default({}) | length > 0 -%}
+            {{ _existing.env | combine(item.env) }}
+          {%- else -%}
+            {{ item.env }}
+          {%- endif -%}
+        {%- elif _preserve and _existing.env | default({}) | length > 0 -%}
+          {{ _existing.env }}
+        {%- else -%}
+          {{ omit }}
+        {%- endif -%}
+
+      # --- Resources ---
+      memory: >-
+        {%- if item.memory is defined -%}
+          {{ item.memory }}
+        {%- elif _preserve and _existing.memory | default(0) > 0 -%}
+          {{ _existing.memory }}
+        {%- else -%}
+          {{ omit }}
+        {%- endif -%}
+      memory_swap: >-
+        {%- if item.memory_swap is defined -%}
+          {{ item.memory_swap }}
+        {%- elif _preserve and _existing.memory_swap | default(0) > 0 -%}
+          {{ _existing.memory_swap }}
+        {%- else -%}
+          {{ omit }}
+        {%- endif -%}
+      memory_reservation: >-
+        {%- if item.memory_reservation is defined -%}
+          {{ item.memory_reservation }}
+        {%- elif _preserve and _existing.memory_reservation | default(0) > 0 -%}
+          {{ _existing.memory_reservation }}
+        {%- else -%}
+          {{ omit }}
+        {%- endif -%}
+      cpus: >-
+        {%- if item.cpus is defined -%}
+          {{ item.cpus }}
+        {%- elif _preserve and _existing.cpus | default(0) > 0 -%}
+          {{ _existing.cpus }}
+        {%- else -%}
+          {{ omit }}
+        {%- endif -%}
+
+      # --- Health ---
+      healthcheck: >-
+        {%- if item.healthcheck is defined -%}
+          {{ item.healthcheck }}
+        {%- elif _preserve and _existing.healthcheck -%}
+          {{ _existing.healthcheck }}
+        {%- else -%}
+          {{ omit }}
+        {%- endif -%}
+
+      # --- Security ---
+      privileged: >-
+        {{ item.privileged | default(_existing.privileged if _preserve else false) }}
+      read_only: >-
+        {{ item.read_only | default(_existing.read_only if _preserve else false) }}
+      capabilities: >-
+        {%- if item.capabilities is defined -%}
+          {{ item.capabilities }}
+        {%- elif _preserve and _existing.capabilities -%}
+          {{ _existing.capabilities }}
+        {%- else -%}
+          {{ omit }}
+        {%- endif -%}
+      security_opts: >-
+        {%- if item.security_opts is defined -%}
+          {{ item.security_opts }}
+        {%- elif _preserve and _existing.security_opts | default([]) | length > 0 -%}
+          {{ _existing.security_opts }}
+        {%- else -%}
+          {{ omit }}
+        {%- endif -%}
+
+      # --- Logging ---
+      log_driver: >-
+        {%- if item.log_driver is defined -%}
+          {{ item.log_driver }}
+        {%- elif _preserve and _existing.log_driver -%}
+          {{ _existing.log_driver }}
+        {%- else -%}
+          {{ apps_default_log_driver }}
+        {%- endif -%}
+      log_options: >-
+        {%- if item.log_options is defined -%}
+          {{ item.log_options }}
+        {%- elif _preserve and _existing.log_options | default({}) | length > 0 -%}
+          {{ _existing.log_options }}
+        {%- else -%}
+          {{ apps_default_log_options }}
+        {%- endif -%}
+
+      # --- Lifecycle ---
+      restart_policy: >-
+        {%- if item.restart_policy is defined -%}
+          {{ item.restart_policy }}
+        {%- elif _preserve and _existing.restart_policy -%}
+          {{ _existing.restart_policy }}
+        {%- else -%}
+          {{ apps_default_restart_policy }}
+        {%- endif -%}
+
+      # --- Labels (always merged) ---
+      labels: >-
+        {%- set mgmt = {'apps.ansible.managed': 'true', 'apps.ansible.name': item.name} if apps_management_labels_enabled else {} -%}
+        {%- set base_labels = _existing.labels | default({}) if _preserve else {} -%}
+        {{ mgmt | combine(base_labels) | combine(item.labels | default({})) }}
+
+  loop: "{{ _apps_sorted }}"
+  loop_control:
+    label: "{{ item.name }}"
+  register: _apps_results
+
+# -----------------------------------------------------------------------------
+# HEALTH CHECK WAIT
+# -----------------------------------------------------------------------------
+- name: Wait for healthy containers
+  community.docker.docker_container_info:
+    name: "{{ item.item.name }}"
+  register: _apps_health
+  until: _apps_health.container.State.Health.Status | default('none') in ['healthy', 'none']
+  retries: 30
+  delay: 5
+  loop: "{{ _apps_results.results | selectattr('changed', 'equalto', true) | list }}"
+  loop_control:
+    label: "{{ item.item.name }}"
+  when:
+    - item.item.healthcheck is defined or
+        (_apps_existing_config.get(item.item.name, {}).healthcheck is defined and
+            item.item.preserve_mode | default(apps_preserve_mode))
+    - item.item.state | default('started') == 'started'

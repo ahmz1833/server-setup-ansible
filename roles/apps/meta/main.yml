@@ -3,9 +3,10 @@ galaxy_info:
   role_name: apps
   author: ahmz
   description: >-
-    Docker container lifecycle manager — creates directories, ensures
-    networks, reconciles container state, and prunes unmanaged containers
-    with configurable whitelist.
+    Production-ready Docker container lifecycle manager. Manages container
+    deployment with full support for networking, volumes, resource limits,
+    health checks, dependencies, and automatic pruning of unmanaged resources.
+  license: MIT
   min_ansible_version: "2.14"
   platforms:
     - name: Ubuntu
@@ -22,5 +23,6 @@ galaxy_info:
     - containers
     - deployment
     - apps
+    - devops
 
 dependencies: []
