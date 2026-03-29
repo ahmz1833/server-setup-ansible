@@ -14,143 +14,258 @@
   delegate_to: localhost
   become: false
 
-- name: HTTP-01 Challenge       # noqa: no-handler
+- name: HTTP-01 Challenge Flow    # noqa: no-handler
   when: acme_challenge is changed
   block:
-    - name: Check for process listening on port 80   # noqa: risky-shell-pipe
-      ansible.builtin.shell: >-
-        lsof -t -i:80 -sTCP:LISTEN 2>/dev/null | head -n 1 ||
-        ss -tlpn 2>/dev/null | grep -E ':(80|http)[ \t]' | grep -Eo 'pid=[0-9]+' | cut -d= -f2 | head -n 1 ||
-        fuser 80/tcp 2>/dev/null | awk '{print $1}' | head -n 1
-      args:
-        executable: /bin/bash
-      register: acme_port80_pid
-      changed_when: false
-      failed_when: false
-      become: true
+    # -------------------------------------------------------------------------
+    # Test if webroot is already working (nginx/apache serving challenges)
+    # -------------------------------------------------------------------------
+    - name: Generate test token for webroot detection
+      ansible.builtin.set_fact:
+        acme_webroot_test_token: "acme-test-{{ ansible_date_time.epoch }}-{{ 999999 | random }}"
 
-    - name: Determine process name if port 80 is occupied
-      ansible.builtin.command: "ps -p {{ acme_port80_pid.stdout }} -o comm="
-      register: acme_port80_comm
-      when: acme_port80_pid.stdout | length > 0
-      changed_when: false
-      become: true
-
-    - name: Prompt for port 80 intervention
-      ansible.builtin.pause:
-        prompt: >
-          [ACTION REQUIRED] Port 80 is used by {{ acme_port80_comm.stdout }} (PID: {{ acme_port80_pid.stdout }}).
-          Type 'auto' to let Ansible temporarily stop and restore it.
-          Type 'manual' if you have manually stopped it in another terminal just now.
-          Any other input will abort the operation.
-      register: acme_port80_prompt
-      when: acme_port80_pid.stdout | length > 0
-      delegate_to: localhost
-      become: false
-
-    - name: Abort if user denied port 80 intervention
-      ansible.builtin.fail:
-        msg: "Operation aborted. Port 80 is required."
-      when:
-        - acme_port80_pid.stdout | length > 0
-        - acme_port80_prompt.user_input | lower not in ['auto', 'manual']
-
-    - name: Stop conflicting service on port 80
-      ansible.builtin.systemd:
-        name: "{{ acme_port80_comm.stdout }}"
-        state: stopped
-      register: acme_service_stop
-      when:
-        - acme_port80_pid.stdout | length > 0
-        - acme_port80_prompt.user_input | lower == 'auto'
-      failed_when: false
-      become: true
-
-    - name: Kill process if systemd stop failed
-      ansible.builtin.command: "kill -15 {{ acme_port80_pid.stdout }}"
-      when:
-        - acme_port80_pid.stdout | length > 0
-        - acme_port80_prompt.user_input | lower == 'auto'
-        - acme_service_stop.failed | default(false)
-      changed_when: false
-      become: true
-
-    - name: Wait for port 80 to be released
-      ansible.builtin.pause:
-        seconds: 3
-      when:
-        - acme_port80_pid.stdout | length > 0
-        - acme_port80_prompt.user_input | lower == 'auto'
-
-    - name: Create temporary standalone webroot
+    - name: Ensure webroot challenge directory exists
       ansible.builtin.file:
-        path: "/tmp/acme_standalone/{{ item.value['http-01'].resource | dirname }}"
+        path: "{{ acme_webroot_path }}/.well-known/acme-challenge"
         state: directory
         mode: '0755'
-      loop: "{{ acme_challenge.challenge_data | dict2items }}"
-      when: acme_challenge.challenge_data is defined
+        owner: "{{ acme_webroot_owner | default('www-data') }}"
+        group: "{{ acme_webroot_group | default('www-data') }}"
       become: true
+      failed_when: false
+      register: acme_webroot_dir_result
 
-    - name: Deploy ACME challenge files to temporary webroot
+    - name: Deploy test challenge file to webroot
       ansible.builtin.copy:
-        dest: "/tmp/acme_standalone/{{ item.value['http-01'].resource }}"
-        content: "{{ item.value['http-01'].resource_value }}"
+        content: "{{ acme_webroot_test_token }}"
+        dest: "{{ acme_webroot_path }}/.well-known/acme-challenge/{{ acme_webroot_test_token }}"
         mode: '0644'
-      loop: "{{ acme_challenge.challenge_data | dict2items }}"
-      when: acme_challenge.challenge_data is defined
       become: true
+      when: acme_webroot_dir_result is not failed
+      register: acme_webroot_file_result
 
-    - name: Start temporary Python web server on port 80
-      ansible.builtin.shell: |
-        nohup python3 -m http.server 80 --directory /tmp/acme_standalone >/tmp/acme_python.log 2>&1 &
-        PID=$!
-        sleep 2
-        if kill -0 $PID 2>/dev/null; then
-          echo $PID
-        else
-          cat /tmp/acme_python.log >&2
-          exit 1
-        fi
-      args:
-        executable: /bin/bash
-      register: acme_standalone_pid
-      changed_when: false
-      become: true
-
-    - name: Validate ACME challenge and fetch certificates
-      community.crypto.acme_certificate:
-        account_key_src: "{{ acme_local_workspace }}/account.key"
-        account_email: "{{ acme_account_email }}"
-        src: "{{ acme_local_cert_dir }}/domain.csr"
-        cert: "{{ acme_local_cert_dir }}/cert.pem"
-        fullchain: "{{ acme_local_cert_dir }}/fullchain.pem"
-        challenge: "http-01"
-        acme_directory: "{{ acme_directory_url }}"
-        acme_version: 2
-        terms_agreed: true
-        modify_account: false
-        data: "{{ acme_challenge }}"
+    - name: Test webroot accessibility via HTTP
+      ansible.builtin.uri:
+        url: "http://{{ acme_current_cn }}/.well-known/acme-challenge/{{ acme_webroot_test_token }}"
+        return_content: true
+        timeout: "{{ acme_webroot_test_timeout }}"
+        status_code: [200]
+      register: acme_webroot_test
+      failed_when: false
       delegate_to: localhost
       become: false
+      when: acme_webroot_file_result is not failed
 
-    - name: Stop temporary Python web server
-      ansible.builtin.command: "kill -9 {{ acme_standalone_pid.stdout }}"
-      changed_when: false
-      failed_when: false
-      become: true
-
-    - name: Remove temporary standalone webroot
+    - name: Remove test challenge file
       ansible.builtin.file:
-        path: "/tmp/acme_standalone"
+        path: "{{ acme_webroot_path }}/.well-known/acme-challenge/{{ acme_webroot_test_token }}"
         state: absent
       become: true
+      when: acme_webroot_file_result is not failed
 
-    - name: Restore conflicting service
-      ansible.builtin.systemd:
-        name: "{{ acme_port80_comm.stdout }}"
-        state: started
-      when:
-        - acme_port80_pid.stdout | length > 0
-        - acme_port80_prompt.user_input | lower == 'auto'
-        - not acme_service_stop.failed | default(false)
-      become: true
+    - name: Evaluate webroot availability
+      ansible.builtin.set_fact:
+        acme_webroot_available: >-
+          {{
+            acme_webroot_test is defined and
+            acme_webroot_test.status | default(0) == 200 and
+            acme_webroot_test.content | default('') | trim == acme_webroot_test_token
+          }}
+
+    - name: Display webroot detection result
+      ansible.builtin.debug:
+        msg: "{{ 'Webroot is available - using existing web server' if acme_webroot_available else 'Webroot not available - will use standalone server' }}"
+
+    # -------------------------------------------------------------------------
+    # Webroot Method (preferred - no service interruption)
+    # -------------------------------------------------------------------------
+    - name: Execute webroot-based HTTP-01 challenge
+      when: acme_webroot_available
+      block:
+        - name: Deploy ACME challenge files to webroot
+          ansible.builtin.copy:
+            dest: "{{ acme_webroot_path }}/{{ item.value['http-01'].resource }}"
+            content: "{{ item.value['http-01'].resource_value }}"
+            mode: '0644'
+          loop: "{{ acme_challenge.challenge_data | dict2items }}"
+          when: acme_challenge.challenge_data is defined
+          become: true
+
+        - name: Validate ACME challenge via webroot
+          community.crypto.acme_certificate:
+            account_key_src: "{{ acme_local_workspace }}/account.key"
+            account_email: "{{ acme_account_email }}"
+            src: "{{ acme_local_cert_dir }}/domain.csr"
+            cert: "{{ acme_local_cert_dir }}/cert.pem"
+            fullchain: "{{ acme_local_cert_dir }}/fullchain.pem"
+            challenge: "http-01"
+            acme_directory: "{{ acme_directory_url }}"
+            acme_version: 2
+            terms_agreed: true
+            modify_account: false
+            data: "{{ acme_challenge }}"
+          delegate_to: localhost
+          become: false
+
+        - name: Remove ACME challenge files from webroot
+          ansible.builtin.file:
+            path: "{{ acme_webroot_path }}/{{ item.value['http-01'].resource }}"
+            state: absent
+          loop: "{{ acme_challenge.challenge_data | dict2items }}"
+          when: acme_challenge.challenge_data is defined
+          become: true
+
+    # -------------------------------------------------------------------------
+    # Standalone Method (fallback - requires port 80)
+    # -------------------------------------------------------------------------
+    - name: Execute standalone HTTP-01 challenge
+      when: not acme_webroot_available
+      block:
+        - name: Check for process listening on port 80    # noqa: risky-shell-pipe
+          ansible.builtin.shell: >-
+            lsof -t -i:80 -sTCP:LISTEN 2>/dev/null | head -n 1 ||
+            ss -tlpn 2>/dev/null | grep -E ':(80|http)[ \t]' | grep -Eo 'pid=[0-9]+' | cut -d= -f2 | head -n 1 ||
+            fuser 80/tcp 2>/dev/null | awk '{print $1}' | head -n 1
+          args:
+            executable: /bin/bash
+          register: acme_port80_pid
+          changed_when: false
+          failed_when: false
+          become: true
+
+        - name: Determine process name if port 80 is occupied
+          ansible.builtin.command: "ps -p {{ acme_port80_pid.stdout }} -o comm="
+          register: acme_port80_comm
+          when: acme_port80_pid.stdout | length > 0
+          changed_when: false
+          become: true
+
+        - name: Prompt for port 80 intervention
+          ansible.builtin.pause:
+            prompt: |
+              [ACTION REQUIRED] Port 80 is used by {{ acme_port80_comm.stdout }} (PID: {{ acme_port80_pid.stdout }}).
+
+              Options:
+
+                'auto'   - Ansible will temporarily stop and restore the service
+
+                'manual' - You have manually stopped it in another terminal
+
+                'abort'  - Cancel the certificate issuance
+
+              Your choice:
+          register: acme_port80_prompt
+          when: acme_port80_pid.stdout | length > 0
+          delegate_to: localhost
+          become: false
+
+        - name: Abort if user denied port 80 intervention
+          ansible.builtin.fail:
+            msg: "Operation aborted by user. Port 80 is required for HTTP-01 challenge."
+          when:
+            - acme_port80_pid.stdout | length > 0
+            - acme_port80_prompt.user_input | lower not in ['auto', 'manual']
+
+        - name: Stop conflicting service on port 80
+          ansible.builtin.systemd:
+            name: "{{ acme_port80_comm.stdout }}"
+            state: stopped
+          register: acme_service_stop
+          when:
+            - acme_port80_pid.stdout | length > 0
+            - acme_port80_prompt.user_input | lower == 'auto'
+          failed_when: false
+          become: true
+
+        - name: Kill process if systemd stop failed
+          ansible.builtin.command: "kill -15 {{ acme_port80_pid.stdout }}"
+          when:
+            - acme_port80_pid.stdout | length > 0
+            - acme_port80_prompt.user_input | lower == 'auto'
+            - acme_service_stop.failed | default(false)
+          changed_when: true
+          become: true
+
+        - name: Wait for port 80 to be released
+          ansible.builtin.wait_for:
+            port: 80
+            state: stopped
+            timeout: 10
+          when:
+            - acme_port80_pid.stdout | length > 0
+            - acme_port80_prompt.user_input | lower == 'auto'
+          become: true
+
+        - name: Create temporary standalone webroot
+          ansible.builtin.file:
+            path: "/tmp/acme_standalone/.well-known/acme-challenge"
+            state: directory
+            mode: '0755'
+          become: true
+
+        - name: Deploy ACME challenge files to temporary webroot
+          ansible.builtin.copy:
+            dest: "/tmp/acme_standalone/{{ item.value['http-01'].resource }}"
+            content: "{{ item.value['http-01'].resource_value }}"
+            mode: '0644'
+          loop: "{{ acme_challenge.challenge_data | dict2items }}"
+          when: acme_challenge.challenge_data is defined
+          become: true
+
+        - name: Start temporary Python web server on port 80
+          ansible.builtin.shell: |
+            set -e
+            nohup python3 -m http.server 80 --directory /tmp/acme_standalone >/tmp/acme_python.log 2>&1 &
+            PID=$!
+            sleep 2
+            if kill -0 $PID 2>/dev/null; then
+              echo $PID
+            else
+              cat /tmp/acme_python.log >&2
+              exit 1
+            fi
+          args:
+            executable: /bin/bash
+          register: acme_standalone_pid
+          changed_when: true
+          become: true
+
+        - name: Validate ACME challenge and fetch certificates
+          community.crypto.acme_certificate:
+            account_key_src: "{{ acme_local_workspace }}/account.key"
+            account_email: "{{ acme_account_email }}"
+            src: "{{ acme_local_cert_dir }}/domain.csr"
+            cert: "{{ acme_local_cert_dir }}/cert.pem"
+            fullchain: "{{ acme_local_cert_dir }}/fullchain.pem"
+            challenge: "http-01"
+            acme_directory: "{{ acme_directory_url }}"
+            acme_version: 2
+            terms_agreed: true
+            modify_account: false
+            data: "{{ acme_challenge }}"
+          delegate_to: localhost
+          become: false
+
+      always:
+        - name: Stop temporary Python web server
+          ansible.builtin.command: "kill -9 {{ acme_standalone_pid.stdout }}"
+          when: acme_standalone_pid.stdout is defined and acme_standalone_pid.stdout | length > 0
+          changed_when: true
+          failed_when: false
+          become: true
+
+        - name: Remove temporary standalone webroot
+          ansible.builtin.file:
+            path: "/tmp/acme_standalone"
+            state: absent
+          become: true
+
+        - name: Restore conflicting service
+          ansible.builtin.systemd:
+            name: "{{ acme_port80_comm.stdout }}"
+            state: started
+          when:
+            - acme_port80_pid.stdout | default('') | length > 0
+            - acme_port80_prompt.user_input | default('') | lower == 'auto'
+            - not (acme_service_stop.failed | default(false))
+          become: true

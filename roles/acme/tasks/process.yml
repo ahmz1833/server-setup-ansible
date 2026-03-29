@@ -10,7 +10,7 @@
 - name: Set certificate variables
   ansible.builtin.set_fact:
     acme_current_cn: "{{ acme_cert_item.domains[0] }}"
-    acme_current_sans: "{{ acme_cert_item.domains[1:] | default([]) }}"
+    acme_current_all_domains: "{{ acme_cert_item.domains }}"
     acme_current_renew_days: "{{ acme_cert_item.renew_days | default(acme_renew_days) }}"
     acme_current_challenge: "{{ acme_cert_item.challenge | default('dns-01') }}"
 

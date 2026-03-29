@@ -1,7 +1,25 @@
 ---
-- name: Reload NGINX
+# Systemd daemon reload - use 'listen' to allow multiple triggers
+- name: Reload systemd daemon
   ansible.builtin.systemd:
-    name: nginx
-    state: reloaded
-  when: nginx_managed | default(false) | bool
-  become: true
+    daemon_reload: true
+  listen: "systemd daemon-reload"
+
+# Flexible certificate reload handler
+- name: Reload certificates
+  listen: "reload certificates"
+  block:
+    - name: Execute custom reload command
+      ansible.builtin.command: "{{ acme_reload_command }}"
+      when: acme_reload_command | default('') | length > 0
+      changed_when: true
+      become: true
+
+    - name: Reload service via systemd
+      ansible.builtin.systemd:
+        name: "{{ acme_reload_service }}"
+        state: reloaded
+      when:
+        - acme_reload_command | default('') | length == 0
+        - acme_reload_service | default('') | length > 0
+      become: true

@@ -19,13 +19,20 @@
   block:
     - name: Prompt for manual DNS TXT record creation
       ansible.builtin.pause:
-        prompt: >
-          [ACTION REQUIRED] DNS-01 Challenge for {{ acme_current_cn }}
-          {% if acme_current_sans | length > 0 %}
-          (Including SANs: {{ acme_current_sans | join(', ') }})
+        prompt: |
+          ╔══════════════════════════════════════════════════════════════════╗
+
+          ║                    DNS-01 CHALLENGE                              ║
+
+          ╚══════════════════════════════════════════════════════════════════╝
+
+          Domain: {{ acme_current_cn }}
+          {% if acme_current_all_domains | length > 1 %}
+
+          SANs:   {{ acme_current_all_domains[1:] | join(', ') }}
           {% endif %}
 
-          Please create the following TXT records:
+          Please create the following DNS TXT record(s):
 
           {% for k, v in acme_challenge.challenge_data.items() %}
           Name: {{ v['dns-01'].record }}
@@ -33,6 +40,8 @@
           Value: {{ v['dns-01'].resource_value }}
 
           {% endfor %}
+
+          Verify propagation: dig TXT {{ (acme_challenge.challenge_data.keys() | list | first) | regex_replace('^', '_acme-challenge.') }}
 
           Press ENTER when all records have propagated globally.
       when: acme_challenge.challenge_data is defined

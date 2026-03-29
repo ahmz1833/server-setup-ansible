@@ -11,7 +11,8 @@
 - name: Generate ACME account private key locally
   community.crypto.openssl_privatekey:
     path: "{{ acme_local_workspace }}/account.key"
-    size: 4096
+    type: ECC
+    curve: secp384r1
   delegate_to: localhost
   run_once: true
   become: false

@@ -1,27 +1,69 @@
 ---
-# acme_directory_url: "https://acme-staging-v02.api.letsencrypt.org/directory"
+# -----------------------------------------------------------------------------
+# ACME Directory & Account
+# -----------------------------------------------------------------------------
+# Production: https://acme-v02.api.letsencrypt.org/directory
+# Staging:    https://acme-staging-v02.api.letsencrypt.org/directory
 acme_directory_url: "https://acme-v02.api.letsencrypt.org/directory"
 acme_account_email: "admin@example.com"
+
+# Local workspace for certificates and keys (on Ansible controller)
 acme_local_workspace: "/tmp/ansible_acme_workspace"
+
+# -----------------------------------------------------------------------------
+# Certificate Defaults
+# -----------------------------------------------------------------------------
+# Days before expiration to trigger renewal
 acme_renew_days: 30
+
+# Default directory for certificates on remote hosts
 acme_default_cert_dir: "/etc/ssl/certs"
 
+# -----------------------------------------------------------------------------
+# HTTP-01 Challenge Settings
+# -----------------------------------------------------------------------------
+# Webroot directory for ACME challenges (used by nginx/apache)
+# The role will first try to use existing webroot before falling back
+# to standalone Python server
+acme_webroot_path: "/var/www/acme"
+
+# Timeout for webroot connectivity test (seconds)
+acme_webroot_test_timeout: 5
+
+# -----------------------------------------------------------------------------
+# Post-Renewal Hooks
+# -----------------------------------------------------------------------------
+# Service to reload after certificate deployment
+# Set to "" to disable automatic reload
+# Examples: "nginx", "apache2", "haproxy", "httpd"
+acme_reload_service: "nginx"
+
+# Alternative: Custom command to run after certificate deployment
+# Takes precedence over acme_reload_service if defined
+# Example: "/usr/local/bin/reload-certs.sh"
+acme_reload_command: ""
+
+# -----------------------------------------------------------------------------
+# Certificate Definitions
+# -----------------------------------------------------------------------------
 acme_certificates: []
 
 # Example certificate configuration:
 # acme_certificates:
 #   - domains:
-#       - "salam.com"    # Automatically saves in /etc/ssl/certs/salam.com/*
+#       - "example.com"           # First domain becomes CN
+#       - "www.example.com"       # Additional domains as SANs
+#     # challenge: "dns-01"       # Default: dns-01 (supports wildcards)
+#     # challenge: "http-01"      # Alternative: http-01 (no wildcards)
+#     # cert_dir: "/etc/ssl/certs/example.com"  # Optional: custom directory
+#     # renew_days: 15            # Optional: override renewal threshold
 #
 #   - domains:
+#       - "*.example.com"         # Wildcard requires dns-01
 #       - "example.com"
-#       - "www.example.com"
-#     cert_dir: "/etc/ssl/certs/example.com"
+#     challenge: "dns-01"
 #
 #   - domains:
-#       - "anotherdomain.com"
-#       - "*.anotherdomain.com"
-#     challenge: "http-01"
-#     fullchain_path: "/etc/ssl/certs/anotherdomain_fullchain.pem"
-#     privkey_path: "/etc/ssl/certs/anotherdomain_privkey.pem"
-#     renew_days: 15
+#       - "custom.com"
+#     fullchain_path: "/etc/ssl/custom_fullchain.pem"  # Explicit paths
+#     privkey_path: "/etc/ssl/custom_privkey.pem"
