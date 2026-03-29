@@ -1,0 +1,108 @@
+---
+# =============================================================================
+# APPS ROLE CONFIGURATION EXAMPLES
+# =============================================================================
+# This file contains simple examples for the apps role.
+# Copy the parts you need into your playbook or host_vars.
+#
+# NOTE: This file is for reference only - it is NOT automatically loaded.
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Example 1: Minimal Single Container
+# -----------------------------------------------------------------------------
+apps_example_minimal:
+  apps_list:
+    - name: whoami
+      image: traefik/whoami:v1.10
+      ports:
+        - "8080:80"
+
+# -----------------------------------------------------------------------------
+# Example 2: App with Relative Data Directory
+# -----------------------------------------------------------------------------
+# Relative volume paths are created under:
+#   {{ apps_base_path }}/{{ app.name }}/
+apps_example_with_data:
+  apps_base_path: "/opt/apps"
+  apps_list:
+    - name: uptime-kuma
+      image: louislam/uptime-kuma:1
+      ports:
+        - "3001:3001"
+      volumes:
+        - "./data:/app/data"
+      restart_policy: unless-stopped
+
+# -----------------------------------------------------------------------------
+# Example 3: Two Apps with a Shared Network
+# -----------------------------------------------------------------------------
+apps_example_shared_network:
+  apps_networks:
+    - name: internal
+
+  apps_list:
+    - name: redis
+      image: redis:7-alpine
+      networks:
+        - name: internal
+
+    - name: web
+      image: nginx:alpine
+      ports:
+        - "8081:80"
+      networks:
+        - name: internal
+      depends_on:
+        - redis
+
+# -----------------------------------------------------------------------------
+# Example 4: Environment Variables and Health Check
+# -----------------------------------------------------------------------------
+apps_example_env_and_healthcheck:
+  apps_list:
+    - name: http-echo
+      image: hashicorp/http-echo:1.0
+      command: ["-text=hello from apps role"]
+      ports:
+        - "5678:5678"
+      env:
+        LOG_LEVEL: "info"
+      healthcheck:
+        test: ["CMD", "wget", "-qO-", "http://127.0.0.1:5678"]
+        interval: 30s
+        timeout: 5s
+        retries: 3
+
+# -----------------------------------------------------------------------------
+# Example 5: Preserve Mode for Partial Updates
+# -----------------------------------------------------------------------------
+# Useful when you want to update only selected fields, such as the image.
+apps_example_preserve_mode:
+  apps_preserve_mode: true
+  apps_list:
+    - name: api
+      image: ghcr.io/example/api:2.1.0
+      pull: always
+
+# -----------------------------------------------------------------------------
+# Example 6: Safe Prune Configuration
+# -----------------------------------------------------------------------------
+# Removes unmanaged containers, but keeps anything matching the whitelist.
+apps_example_prune:
+  apps_prune:
+    enabled: true
+    containers: true
+    networks: false
+    whitelist_patterns:
+      - "^sandbox-.*$"
+    whitelist_labels:
+      - "com.example.keep"
+      - key: "com.example.role"
+        value: "system"
+
+  apps_list:
+    - name: managed-nginx
+      image: nginx:alpine
+      ports:
+        - "8082:80"
