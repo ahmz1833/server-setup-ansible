@@ -81,6 +81,14 @@
             {%- set _ = caps.update({'drop': hc.CapDrop}) -%}
           {%- endif -%}
           {#- Build entry -#}
+          {%- set tmpfs_list = [] -%}
+          {%- for tmpfs_path, tmpfs_opts in (hc.Tmpfs or {}) | items -%}
+            {%- if tmpfs_opts | default('') | length > 0 -%}
+              {%- set _ = tmpfs_list.append(tmpfs_path ~ ':' ~ tmpfs_opts) -%}
+            {%- else -%}
+              {%- set _ = tmpfs_list.append(tmpfs_path) -%}
+            {%- endif -%}
+          {%- endfor -%}
           {%- set entry = {
             'exists': true,
             'command': cfg.Cmd,
@@ -92,7 +100,7 @@
             'networks': net_list,
             'dns': hc.Dns | default([]),
             'volumes': hc.Binds | default([]),
-            'tmpfs': (hc.Tmpfs or {}) | list,
+            'tmpfs': tmpfs_list,
             'env': env_dict,
             'labels': cfg.Labels | default({}),
             'memory': hc.Memory | default(0),

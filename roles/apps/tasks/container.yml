@@ -66,7 +66,7 @@
       networks: allow_more_present
   vars:
     _preserve: "{{ _apps_app.preserve_mode | default(apps_preserve_mode) | bool }}"
-    _existing: "{{ _apps_apps_existing_config.get(_apps_app.name, {}) }}"
+    _existing: "{{ _apps_existing_config.get(_apps_app.name, {}) }}"
     _has_existing: "{{ _existing.get('exists', false) }}"
     _base: "{{ apps_base_path }}/{{ _apps_app.name }}/"
 
@@ -252,11 +252,10 @@
   retries: "{{ (_apps_app.healthcheck_wait_timeout | default(300) / 5) | int }}"
   delay: 5
   when:
-    - _apps_app_deploy_result is changed
     - _apps_app.state | default('started') == 'started'
     - _apps_app.healthcheck_wait | default(true) | bool
     - _apps_app.healthcheck is defined or (_preserve and _has_existing and _existing.healthcheck)
   vars:
     _preserve: "{{ _apps_app.preserve_mode | default(apps_preserve_mode) | bool }}"
-    _existing: "{{ _apps_apps_existing_config.get(_apps_app.name, {}) }}"
+    _existing: "{{ _apps_existing_config.get(_apps_app.name, {}) }}"
     _has_existing: "{{ _existing.get('exists', false) }}"
