@@ -5,6 +5,9 @@ sandbox_managed: true
 # Note: You must add this port to `core_firewall_rules` in your playbook
 sandbox_ssh_port: 2222
 
+# Enforce exclusive mode: remove any sandbox-* containers not defined in the list
+sandbox_prune: false
+
 # The shared host user that accepts incoming SSH connections
 sandbox_shared_user: "sandbox"
 

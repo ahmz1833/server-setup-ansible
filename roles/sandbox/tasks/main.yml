@@ -1,4 +1,40 @@
 ---
+- name: Prune unmanaged sandbox containers (Exclusive mode)
+  when: sandbox_managed
+  tags: [sandbox, sandbox-prune]
+  block:
+    - name: Gather docker host information
+      community.docker.docker_host_info:
+        containers: true
+      register: _sandbox_docker_info
+
+    - name: Calculate expected and current sandbox containers
+      ansible.builtin.set_fact:
+        _sandbox_expected_instances: >-
+          {{
+            sandbox_users
+            | map(attribute='name')
+            | map('regex_replace', '^', 'sandbox-')
+            | list
+          }}
+        _sandbox_current_instances: >-
+          {{
+            _sandbox_docker_info.containers
+            | default([])
+            | selectattr('Names', 'defined')
+            | map(attribute='Names')
+            | flatten
+            | map('regex_replace', '^/', '')
+            | select('match', '^sandbox-.*$')
+            | list
+          }}
+
+    - name: Remove/Stop unmanaged sandbox containers
+      community.docker.docker_container:
+        name: "{{ item }}"
+        state: "{{ (sandbox_prune | default(false)) | ternary('absent', 'stopped') }}"
+      loop: "{{ _sandbox_current_instances | difference(_sandbox_expected_instances) }}"
+
 - name: Provision sandbox users
   when: sandbox_managed
   tags: [sandbox]
