@@ -61,7 +61,7 @@ apps_networks: []
 #   apps_list:
 #     - name: myapp                        # Required: container name
 #       image: nginx:latest                # Required: Docker image
-#       state: started                     # started, stopped, absent
+#       state: started                     # started, stopped, absent (image optional if stopped/absent)
 #       preserve_mode: false               # Override global preserve_mode
 #
 #       # Execution
@@ -157,7 +157,8 @@ apps_prune:
   containers: true
   networks: false
 
-  # Container name patterns to never prune (regex)
+  # Container name patterns to never prune (regex).
+  # tasks/prune.yml always prepends ^sandbox-.*$ even if this list is empty.
   whitelist_patterns:
     - "^sandbox-.*$"
 

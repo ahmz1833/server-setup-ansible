@@ -7,12 +7,12 @@
     that:
       - item.name is defined
       - item.name is match('^[a-zA-Z0-9][a-zA-Z0-9_.-]*$')
-      - (item.state | default('started')) == 'absent' or item.image is defined
-      - (item.state | default('started')) == 'absent' or item.image | length > 0
+      - (item.state | default('started')) in ['absent', 'stopped'] or item.image is defined
+      - (item.state | default('started')) in ['absent', 'stopped'] or item.image | length > 0
       - item.state | default('started') in ['started', 'stopped', 'absent']
     fail_msg: >-
       Invalid app '{{ item.name | default('UNNAMED') }}':
-      name must be alphanumeric (with . - _), image required unless state=absent,
+      name must be alphanumeric (with . - _), image required unless state is absent or stopped,
       state must be started/stopped/absent
     quiet: true
   loop: "{{ apps_list }}"

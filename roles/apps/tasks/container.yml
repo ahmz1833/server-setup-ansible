@@ -2,7 +2,16 @@
 - name: "Deploy container: {{ _apps_app.name }}"
   community.docker.docker_container:
     name: "{{ _apps_app.name }}"
-    image: "{{ _apps_app.image }}"
+    image: >-
+      {{
+        omit
+        if (_apps_app.state | default('started') == 'absent')
+        else (
+          _apps_app.image
+          if (_apps_app.image is defined and _apps_app.image | length > 0)
+          else omit
+        )
+      }}
     state: "{{ _apps_app.state | default('started') }}"
 
     # Execution
