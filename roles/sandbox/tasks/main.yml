@@ -1,0 +1,186 @@
+---
+- name: Validate sandbox configuration
+  ansible.builtin.import_tasks: validate.yml
+  tags: [sandbox, sandbox-prune]
+  when: sandbox_managed | bool
+
+- name: Prune unmanaged sandbox containers (Exclusive mode)
+  when: sandbox_managed | bool
+  tags: [sandbox, sandbox-prune]
+  block:
+    - name: Gather docker host information
+      community.docker.docker_host_info:
+        containers: true
+      register: _sandbox_docker_info
+
+    - name: Calculate expected and current sandbox containers
+      ansible.builtin.set_fact:
+        _sandbox_expected_instances: >-
+          {{
+            sandbox_users
+            | map(attribute='name')
+            | map('regex_replace', '^', 'sandbox-')
+            | list
+          }}
+        _sandbox_current_instances: >-
+          {{
+            _sandbox_docker_info.containers
+            | default([])
+            | selectattr('Names', 'defined')
+            | map(attribute='Names')
+            | flatten
+            | map('regex_replace', '^/', '')
+            | select('match', '^sandbox-.*$')
+            | list
+          }}
+
+    - name: Remove/Stop unmanaged sandbox containers
+      community.docker.docker_container:
+        name: "{{ item }}"
+        state: "{{ (sandbox_prune | default(false) | bool) | ternary('absent', 'stopped') }}"
+      loop: "{{ _sandbox_current_instances | difference(_sandbox_expected_instances) }}"
+
+- name: Provision sandbox users
+  when: sandbox_managed | bool
+  tags: [sandbox]
+  block:
+    - name: Create the shared sandbox user
+      ansible.builtin.user:
+        name: "{{ sandbox_shared_user }}"
+        state: present
+        create_home: true
+        shell: /bin/bash
+        password_lock: true
+      register: sandbox_user_info
+
+    - name: Ensure home directories for virtual users exist
+      ansible.builtin.file:
+        path: "/home/{{ sandbox_shared_user }}/{{ item.name }}"
+        state: directory
+        mode: '0700'
+        owner: "{{ sandbox_shared_user }}"
+        group: "{{ sandbox_shared_user }}"
+      loop: "{{ sandbox_users }}"
+
+    - name: Create login/wrapper script for virtual users
+      ansible.builtin.template:
+        src: sandbox-login.sh.j2
+        dest: /usr/local/bin/sandbox-login.sh
+        mode: '0755'
+        owner: root
+        group: root
+
+    - name: Configure sudoers for shared sandbox user
+      ansible.builtin.copy:
+        dest: "/etc/sudoers.d/{{ sandbox_shared_user }}"
+        content: |
+          Defaults:{{ sandbox_shared_user }} env_keep += "SSH_ORIGINAL_COMMAND"
+          {{ sandbox_shared_user }} ALL=(root) NOPASSWD: /usr/local/bin/sandbox-login.sh
+        mode: '0440'
+        owner: root
+        group: root
+        validate: 'visudo -cf %s'
+
+    - name: Ensure .ssh directory exists
+      ansible.builtin.file:
+        path: "/home/{{ sandbox_shared_user }}/.ssh"
+        state: directory
+        mode: '0700'
+        owner: "{{ sandbox_shared_user }}"
+        group: "{{ sandbox_shared_user }}"
+
+    - name: Map virtual users via authorized_keys
+      ansible.builtin.template:
+        src: authorized_keys.j2
+        dest: "/home/{{ sandbox_shared_user }}/.ssh/authorized_keys"
+        mode: '0600'
+        owner: "{{ sandbox_shared_user }}"
+        group: "{{ sandbox_shared_user }}"
+
+    - name: Deploy sandbox containers
+      community.docker.docker_container:
+        name: "sandbox-{{ item.name }}"
+        image: "{{ item.image | default('ubuntu:24.04') }}"
+        state: started
+        init: true
+        stop_timeout: 5
+        restart_policy: always
+        command: sleep infinity
+        user: "{{ sandbox_user_info.uid }}:{{ sandbox_user_info.group }}"
+        working_dir: "{{ item.working_dir | default('/home/' ~ item.name) }}"
+        ports: "{{ item.ports | default(omit) }}"
+        env: >-
+          {{
+            {'HOME': '/home/' ~ item.name} | combine(item.env | default({}))
+          }}
+        volumes: >-
+          {{
+            item.volumes | default([
+              '/home/' ~ sandbox_shared_user ~ '/' ~ item.name ~ ':/home/' ~ item.name
+            ])
+          }}
+        networks: "{{ item.networks | default(omit) }}"
+        memory: "{{ item.memory | default(omit) }}"
+        cpus: "{{ item.cpus | default(omit) }}"
+      loop: "{{ sandbox_users }}"
+      loop_control:
+        label: "{{ item.name }}"
+
+    - name: Stage init-sandbox script temporarily
+      ansible.builtin.template:
+        src: init-sandbox.sh.j2
+        dest: /tmp/init-sandbox.sh
+        mode: '0755'
+        owner: root
+        group: root
+      changed_when: false
+
+    - name: Copy script to containers and execute initialization
+      ansible.builtin.shell: |
+        set -e
+        docker cp /tmp/init-sandbox.sh "sandbox-{{ item.name }}:/usr/local/bin/init-sandbox.sh"
+        docker exec -u 0:0 "sandbox-{{ item.name }}" chown root:root /usr/local/bin/init-sandbox.sh
+        docker exec -u 0:0 "sandbox-{{ item.name }}" chmod 0755 /usr/local/bin/init-sandbox.sh
+        docker exec -u 0:0 "sandbox-{{ item.name }}" /usr/local/bin/init-sandbox.sh \
+                                   "{{ item.name }}" "{{ sandbox_user_info.uid }}" "{{ sandbox_user_info.group }}"
+      loop: "{{ sandbox_users }}"
+      loop_control:
+        label: "{{ item.name }}"
+      register: _sandbox_init_result
+      changed_when: >
+        (_sandbox_init_result.results
+        | map(attribute='rc')
+        | select('equalto', 10)
+        | list
+        | length) > 0
+      failed_when: >
+        (_sandbox_init_result.results
+        | map(attribute='rc')
+        | reject('equalto', 0)
+        | reject('equalto', 10)
+        | list
+        | length) > 0
+
+    - name: Cleanup temporary init-sandbox script
+      ansible.builtin.file:
+        path: /tmp/init-sandbox.sh
+        state: absent
+      changed_when: false
+
+    - name: Configure Sandbox SSH Port and Rules
+      ansible.builtin.blockinfile:
+        path: /etc/ssh/sshd_config
+        marker: "# {mark} ANSIBLE MANAGED SANDBOX SSH"
+        block: |
+          Port {{ sandbox_ssh_port }}
+
+          Match LocalPort {{ sandbox_ssh_port }}
+              AllowUsers {{ sandbox_shared_user }}
+
+          Match User {{ sandbox_shared_user }}
+              AllowTcpForwarding no
+              X11Forwarding no
+              PermitTunnel no
+              AllowAgentForwarding no
+        validate: sshd -t -f %s
+      notify: Restart sshd

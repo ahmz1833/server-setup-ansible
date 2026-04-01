@@ -1,0 +1,42 @@
+#!/bin/sh
+# Managed by Ansible
+
+if [ -z "$3" ]; then
+    exit 1
+fi
+
+VIRTUAL_USER="$1"
+HOST_UID="$2"
+HOST_GID="$3"
+CHANGED=0
+
+if ! awk -F: -v gid="$HOST_GID" '$3 == gid' /etc/group | grep -q .; then
+    echo "$VIRTUAL_USER:x:$HOST_GID:" >> /etc/group
+    CHANGED=1
+fi
+
+if ! awk -F: -v uid="$HOST_UID" '$3 == uid' /etc/passwd | grep -q .; then
+    echo "$VIRTUAL_USER:x:$HOST_UID:$HOST_GID::/home/$VIRTUAL_USER:/bin/bash" >> /etc/passwd
+    if [ -f /etc/shadow ] && ! grep -q "^$VIRTUAL_USER:" /etc/shadow; then
+        echo "$VIRTUAL_USER:*:19000:0:99999:7:::" >> /etc/shadow
+    fi  
+    if command -v chpasswd >/dev/null 2>&1; then
+        echo "$VIRTUAL_USER:1" | chpasswd
+    fi
+    CHANGED=1
+fi
+
+if command -v sudo >/dev/null 2>&1; then
+    mkdir -p /etc/sudoers.d
+    if [ ! -f "/etc/sudoers.d/99-sandbox" ]; then
+        echo "$VIRTUAL_USER ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/99-sandbox
+        chmod 0440 /etc/sudoers.d/99-sandbox
+        CHANGED=1
+    fi
+fi
+
+if [ "$CHANGED" -eq 1 ]; then
+    exit 10
+else
+    exit 0
+fi

@@ -1,0 +1,10 @@
+---
+- name: Restart sshd
+  ansible.builtin.service:
+    name: >-
+      {{
+        'ssh'
+        if (ansible_facts | default({})).get('os_family') == 'Debian'
+        else 'sshd'
+      }}
+    state: restarted

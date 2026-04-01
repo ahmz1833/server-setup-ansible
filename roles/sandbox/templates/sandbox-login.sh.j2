@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# Managed by Ansible
+
+if [ -z "$1" ]; then
+    echo "Access Denied: Virtual identity not provided."
+    exit 1
+fi
+
+VIRTUAL_USER="$1"
+USER_SHELL="${2:-/bin/bash}"
+CONTAINER="sandbox-$VIRTUAL_USER"
+
+if ! /usr/bin/docker ps -q -f name="^/${CONTAINER}$" | grep -q .; then
+    echo "Access Denied: Sandbox environment '${VIRTUAL_USER}' is offline."
+    exit 1
+fi
+
+# Retrieve the exact UID and GID of the shared sandbox user
+HOST_UID=$(id -u {{ sandbox_shared_user }})
+HOST_GID=$(id -g {{ sandbox_shared_user }})
+
+# Execute the requested command or provide an interactive shell
+if [ -n "$SSH_ORIGINAL_COMMAND" ]; then
+    exec /usr/bin/docker exec -u "$HOST_UID:$HOST_GID" -i "$CONTAINER" /bin/bash -c "$SSH_ORIGINAL_COMMAND"
+else
+    # Pass TERM and LANG to ensure the prompt layout and keys work perfectly
+    exec /usr/bin/docker exec -u "$HOST_UID:$HOST_GID" -e TERM="${TERM:-xterm-256color}" -e LANG="${LANG:-C.UTF-8}" -it "$CONTAINER" "$USER_SHELL"
+fi

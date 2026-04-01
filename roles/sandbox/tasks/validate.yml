@@ -1,0 +1,38 @@
+---
+# Runs before prune so an empty sandbox_users list cannot stop every sandbox-* container.
+
+- name: Require at least one entry in sandbox_users when managed
+  tags: [sandbox, sandbox-prune]
+  ansible.builtin.assert:
+    that:
+      - sandbox_users | length > 0
+    fail_msg: >-
+      sandbox_users is empty but sandbox_managed is true. The next step would stop or
+      remove every sandbox-* container and leave SSH without any forced-command mapping.
+      Add virtual users or set sandbox_managed to false.
+    quiet: true
+
+- name: Validate each virtual user has a name and SSH keys
+  tags: [sandbox, sandbox-prune]
+  ansible.builtin.assert:
+    that:
+      - item.name is match('^[a-zA-Z0-9][a-zA-Z0-9_.-]*$')
+      - item.ssh_keys is defined
+      - item.ssh_keys | length > 0
+    fail_msg: >-
+      Invalid sandbox user entry (name='{{ item.name | default('missing') }}'): name must
+      be a safe identifier; ssh_keys must be a non-empty list of public keys.
+    quiet: true
+  loop: "{{ sandbox_users }}"
+  loop_control:
+    label: "{{ item.name | default('UNNAMED') }}"
+
+- name: Ensure virtual user names are unique
+  tags: [sandbox, sandbox-prune]
+  ansible.builtin.assert:
+    that:
+      - sandbox_users | map(attribute='name') | list | length ==
+        sandbox_users | map(attribute='name') | unique | list | length
+    fail_msg: Duplicate name values in sandbox_users are not allowed.
+    quiet: true
+  when: sandbox_users | length > 1
