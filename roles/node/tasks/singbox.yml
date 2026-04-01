@@ -1,13 +1,26 @@
 ---
+- name: Set sing-box release tarball libc suffix (Alpine/musl vs glibc)
+  ansible.builtin.set_fact:
+    node_singbox_rel_libc_suffix: >-
+      {{
+        '-musl'
+        if (node_singbox_libc | default('auto')) == 'musl'
+        else (
+          ''
+          if (node_singbox_libc | default('auto')) == 'glibc'
+          else ('-musl' if ansible_facts.get('os_family') == 'Alpine' else '')
+        )
+      }}
+
 - name: Install sing-box via remote_asset role
   ansible.builtin.include_role:
     name: ahmz.server_setup.asset
   vars:
     asset_name: "sing-box"
     asset_version: "{{ node_singbox_version }}"
-    asset_url: "github.com/SagerNet/sing-box/releases/download/v%v/sing-box-%v-linux-amd64.tar.gz"
+    asset_url: "github.com/SagerNet/sing-box/releases/download/v%v/sing-box-%v-linux-{{ node_arch_go_platform_suffix ~ node_singbox_rel_libc_suffix }}.tar.gz"
     asset_extract: true
-    asset_extract_src: "sing-box-%v-linux-amd64/sing-box"
+    asset_extract_src: "sing-box-%v-linux-{{ node_arch_go_platform_suffix }}{{ node_singbox_rel_libc_suffix }}/sing-box"
     asset_version_cmd: "version"
     asset_version_regex: 'sing-box version ([0-9.]+)'
     asset_service_stop: "sing-box"

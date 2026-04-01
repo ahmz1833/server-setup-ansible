@@ -12,9 +12,9 @@
   vars:
     asset_name: "node_exporter"
     asset_version: "{{ node_exporter_version }}"
-    asset_url: "github.com/prometheus/node_exporter/releases/download/v%v/node_exporter-%v.linux-amd64.tar.gz"
+    asset_url: "github.com/prometheus/node_exporter/releases/download/v%v/node_exporter-%v.linux-{{ node_arch_go_platform_suffix }}.tar.gz"
     asset_extract: true
-    asset_extract_src: "node_exporter-%v.linux-amd64/node_exporter"
+    asset_extract_src: "node_exporter-%v.linux-{{ node_arch_go_platform_suffix }}/node_exporter"
     asset_version_cmd: "--version"
     asset_version_regex: 'version\s+v?([0-9.]+)'
     asset_service_stop: "node_exporter"

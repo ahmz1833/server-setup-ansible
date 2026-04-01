@@ -6,6 +6,121 @@ node_internet_restricted: '{{ is_iran | default(false) }}'
 node_enable_ipv6: '{{ enable_ipv6 | default(false) }}'
 
 # -----------------------------------------------------------------------------
+# ARCHITECTURE (ansible_facts.architecture → upstream release tokens)
+#
+# Override per host or group when ansible_facts.architecture is unusual or an upstream
+# drops a variant for your CPU. Docker engine/plugins use several naming schemes
+# (static tarballs vs buildx vs compose); they are grouped under Docker below.
+# Unmapped architecture fact falls back to the raw string (downloads may 404).
+# -----------------------------------------------------------------------------
+# Prometheus node_exporter, sing-box, x-ui: linux-amd64, linux-arm64, linux-armv7, …
+# Go tarballs (fzf, gost): linux_amd64, linux_arm64, … (same token, underscore URL)
+node_arch_go_platform_suffix_map:
+  x86_64: amd64
+  amd64: amd64
+  aarch64: arm64
+  arm64: arm64
+  armv7l: armv7
+  armv6l: armv6
+  armv5l: armv5
+  ppc64: ppc64
+  ppc64le: ppc64le
+  s390x: s390x
+  riscv64: riscv64
+  i386: "386"
+  i686: "386"
+node_arch_go_platform_suffix: "{{ node_arch_go_platform_suffix_map.get(ansible_facts['architecture'], ansible_facts['architecture']) }}"
+
+# download.docker.com/linux/static/stable/<arch>/ (x86_64 and aarch64, not amd64/arm64)
+node_arch_docker_static_tarball_map:
+  x86_64: x86_64
+  amd64: x86_64
+  aarch64: aarch64
+  arm64: aarch64
+  armv7l: armhf
+  armv6l: armhf
+  ppc64le: ppc64le
+  s390x: s390x
+node_arch_docker_static_tarball: "{{ node_arch_docker_static_tarball_map.get(ansible_facts['architecture'], ansible_facts['architecture']) }}"
+
+# Used by tasks/docker.yml for download.docker.com static engine tarball URL
+node_docker_asset_arch: "{{ node_arch_docker_static_tarball }}"
+
+# docker/buildx releases: buildx-vX.linux-<arch>
+node_docker_buildx_arch_map:
+  x86_64: amd64
+  amd64: amd64
+  aarch64: arm64
+  arm64: arm64
+  armv7l: arm-v7
+  armv6l: arm-v6
+  ppc64le: ppc64le
+  s390x: s390x
+  riscv64: riscv64
+node_docker_buildx_arch: "{{ node_docker_buildx_arch_map.get(ansible_facts['architecture'], ansible_facts['architecture']) }}"
+
+# docker/compose releases: docker-compose-linux-x86_64, …-aarch64, …-armv7 (not amd64/arm64)
+node_docker_compose_arch_map:
+  x86_64: x86_64
+  amd64: x86_64
+  aarch64: aarch64
+  arm64: aarch64
+  armv7l: armv7
+  armv6l: armv6
+  ppc64le: ppc64le
+  s390x: s390x
+  riscv64: riscv64
+node_docker_compose_arch: "{{ node_docker_compose_arch_map.get(ansible_facts['architecture'], ansible_facts['architecture']) }}"
+
+# eza: Rust triple in tarball name (aarch64 builds are gnu-only in many releases)
+node_arch_eza_triple_map:
+  x86_64: x86_64-unknown-linux-musl
+  amd64: x86_64-unknown-linux-musl
+  aarch64: aarch64-unknown-linux-gnu
+  arm64: aarch64-unknown-linux-gnu
+  armv7l: arm-unknown-linux-gnueabihf
+  armv6l: arm-unknown-linux-gnueabihf
+  armv5l: arm-unknown-linux-gnueabihf
+node_arch_eza_triple: "{{ node_arch_eza_triple_map.get(ansible_facts['architecture'], ansible_facts['architecture']) }}"
+
+node_arch_zoxide_triple_map:
+  x86_64: x86_64-unknown-linux-musl
+  amd64: x86_64-unknown-linux-musl
+  aarch64: aarch64-unknown-linux-musl
+  arm64: aarch64-unknown-linux-musl
+  armv7l: armv7-unknown-linux-musleabihf
+  armv6l: arm-unknown-linux-musleabihf
+  armv5l: arm-unknown-linux-musleabihf
+  i386: i686-unknown-linux-musl
+  i686: i686-unknown-linux-musl
+node_arch_zoxide_triple: "{{ node_arch_zoxide_triple_map.get(ansible_facts['architecture'], ansible_facts['architecture']) }}"
+
+node_arch_starship_triple_map:
+  x86_64: x86_64-unknown-linux-musl
+  amd64: x86_64-unknown-linux-musl
+  aarch64: aarch64-unknown-linux-musl
+  arm64: aarch64-unknown-linux-musl
+  armv7l: arm-unknown-linux-musleabihf
+  armv6l: arm-unknown-linux-musleabihf
+  armv5l: arm-unknown-linux-musleabihf
+  i386: i686-unknown-linux-musl
+  i686: i686-unknown-linux-musl
+node_arch_starship_triple: "{{ node_arch_starship_triple_map.get(ansible_facts['architecture'], ansible_facts['architecture']) }}"
+
+# lazydocker: Linux_x86_64, Linux_arm64, Linux_armv7, …
+node_arch_lazydocker_map:
+  x86_64: x86_64
+  amd64: x86_64
+  aarch64: arm64
+  arm64: arm64
+  armv7l: armv7
+  armv6l: armv6
+  armv5l: armv6
+  i386: x86
+  i686: x86
+node_arch_lazydocker: "{{ node_arch_lazydocker_map.get(ansible_facts['architecture'], ansible_facts['architecture']) }}"
+
+# -----------------------------------------------------------------------------
 # SING-BOX CONFIGURATION
 #
 # Sing-box is a universal proxy platform. Links are parsed natively using
@@ -17,6 +132,8 @@ node_enable_ipv6: '{{ enable_ipv6 | default(false) }}'
 node_singbox_install: '{{ node_internet_restricted }}'
 node_singbox_enabled: false
 node_singbox_version: "1.13.3"
+# sing-box release tarball: auto uses -musl on Alpine; glibc | musl to force
+node_singbox_libc: auto
 
 # Mixed inbound (SOCKS5 + HTTP proxy)
 node_singbox_mixed_listen: "127.0.0.1"
@@ -124,6 +241,8 @@ node_singbox_direct_ip_cidr: []
 # -----------------------------------------------------------------------------
 # TOOLS & BOOTSTRAP
 # System packages and shell environment setup.
+# Package names below match Debian/Ubuntu; override the whole list on RHEL/Alpine
+# (e.g. netcat-openbsd → nmap-ncat on EL, or install nc via apk add on Alpine).
 # -----------------------------------------------------------------------------
 node_tools_packages:
   - zsh
@@ -208,27 +327,13 @@ node_xui_key_path: ""
 # DOCKER
 # Docker container runtime with optional Compose installation.
 # Examples: examples/docker.yml
+# Download architecture maps: ARCHITECTURE section (node_docker_asset_arch, buildx, compose).
 # -----------------------------------------------------------------------------
 node_docker_enabled: true
 node_docker_min_version: "29.2.0"
 node_docker_version: "29.3.1"
 node_docker_package_dir: "/usr/local/lib/docker"
 node_docker_cli_plugin_dir: "/usr/local/libexec/docker/cli-plugins"
-
-########
-node_docker_asset_arch_map:
-  x86_64: "x86_64"
-  amd64: "x86_64"
-  aarch64: "aarch64"
-  arm64: "aarch64"
-node_docker_asset_arch: "{{ node_docker_asset_arch_map.get(ansible_architecture, ansible_architecture) }}"
-node_docker_plugin_arch_map:
-  x86_64: "amd64"
-  amd64: "amd64"
-  aarch64: "arm64"
-  arm64: "arm64"
-node_docker_plugin_arch: "{{ node_docker_plugin_arch_map.get(ansible_architecture, ansible_architecture) }}"
-######
 
 node_docker_binaries:
   - docker

@@ -6,7 +6,7 @@
     asset_name: "x-ui"
     asset_type: "package"
     asset_version: "{{ node_xui_version }}"
-    asset_url: "github.com/{{ node_xui_repo }}/releases/download/v%v/x-ui-linux-amd64.tar.gz"
+    asset_url: "github.com/{{ node_xui_repo }}/releases/download/v%v/x-ui-linux-{{ node_arch_go_platform_suffix }}.tar.gz"
     asset_dest: "/usr/local/x-ui"
     asset_extract: true
     asset_extract_src: "x-ui"

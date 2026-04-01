@@ -5,7 +5,7 @@
   vars:
     asset_name: "gost"
     asset_version: "{{ node_gost_version }}"
-    asset_url: "github.com/go-gost/gost/releases/download/v%v/gost_%v_linux_amd64.tar.gz"
+    asset_url: "github.com/go-gost/gost/releases/download/v%v/gost_%v_linux_{{ node_arch_go_platform_suffix }}.tar.gz"
     asset_extract: true
     asset_extract_src: "gost"
     asset_version_cmd: "-V"

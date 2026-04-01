@@ -11,7 +11,7 @@
   vars:
     asset_name: "fzf"
     asset_version: "{{ node_fzf_version }}"
-    asset_url: "github.com/junegunn/fzf/releases/download/v%v/fzf-%v-linux_amd64.tar.gz"
+    asset_url: "github.com/junegunn/fzf/releases/download/v%v/fzf-%v-linux_{{ node_arch_go_platform_suffix }}.tar.gz"
     asset_extract: true
     asset_extract_src: "fzf"
     asset_version_cmd: "--version"
@@ -25,7 +25,7 @@
   vars:
     asset_name: "eza"
     asset_version: "{{ node_eza_version }}"
-    asset_url: "github.com/eza-community/eza/releases/download/v%v/eza_x86_64-unknown-linux-musl.tar.gz"
+    asset_url: "github.com/eza-community/eza/releases/download/v%v/eza_{{ node_arch_eza_triple }}.tar.gz"
     asset_extract: true
     asset_extract_src: "eza"
     asset_version_cmd: "--version"
@@ -39,7 +39,7 @@
   vars:
     asset_name: "zoxide"
     asset_version: "{{ node_zoxide_version }}"
-    asset_url: "github.com/ajeetdsouza/zoxide/releases/download/v%v/zoxide-%v-x86_64-unknown-linux-musl.tar.gz"
+    asset_url: "github.com/ajeetdsouza/zoxide/releases/download/v%v/zoxide-%v-{{ node_arch_zoxide_triple }}.tar.gz"
     asset_extract: true
     asset_extract_src: "zoxide"
     asset_version_cmd: "--version"
@@ -53,7 +53,7 @@
   vars:
     asset_name: "starship"
     asset_version: "{{ node_starship_version }}"
-    asset_url: "github.com/starship/starship/releases/download/v%v/starship-x86_64-unknown-linux-musl.tar.gz"
+    asset_url: "github.com/starship/starship/releases/download/v%v/starship-{{ node_arch_starship_triple }}.tar.gz"
     asset_extract: true
     asset_extract_src: "starship"
     asset_version_cmd: "--version"
@@ -84,7 +84,7 @@
   vars:
     asset_name: "lazydocker"
     asset_version: "{{ node_lazydocker_version }}"
-    asset_url: "github.com/jesseduffield/lazydocker/releases/download/v%v/lazydocker_%v_Linux_x86_64.tar.gz"
+    asset_url: "github.com/jesseduffield/lazydocker/releases/download/v%v/lazydocker_%v_Linux_{{ node_arch_lazydocker }}.tar.gz"
     asset_extract: true
     asset_extract_src: "lazydocker"
     asset_version_cmd: "--version"

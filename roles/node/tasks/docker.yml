@@ -37,6 +37,15 @@
 - name: Install or update Docker from managed assets
   when: node_docker_needs_install
   block:
+    - name: Refuse glibc-linked static Docker on Alpine/musl
+      ansible.builtin.fail:
+        msg: >-
+          This role installs Docker from download.docker.com static tarballs
+          (glibc-linked). They do not run on Alpine/musl as-is. Use distro
+          packages (e.g. apk add docker), another install method, or set
+          node_docker_enabled to false.
+      when: ansible_facts.get('os_family') == 'Alpine'
+
     - name: Stop Docker services before cleanup
       ansible.builtin.systemd:
         name: "{{ item }}"
@@ -59,6 +68,7 @@
           - docker
           - docker.io
           - docker-engine
+          - moby-engine
           - docker-ce
           - docker-ce-cli
           - docker-ce-rootless-extras
@@ -127,7 +137,7 @@
   vars:
     asset_name: "docker-buildx"
     asset_version: "{{ node_docker_buildx_version }}"
-    asset_url: "github.com/docker/buildx/releases/download/v%v/buildx-v%v.linux-{{ node_docker_plugin_arch }}"
+    asset_url: "github.com/docker/buildx/releases/download/v%v/buildx-v%v.linux-{{ node_docker_buildx_arch }}"
     asset_dest: "{{ node_docker_cli_plugin_dir }}/docker-buildx"
     asset_extract: false
     asset_version_cmd: "version"
@@ -150,7 +160,7 @@
   vars:
     asset_name: "docker-compose"
     asset_version: "{{ node_docker_compose_version }}"
-    asset_url: "github.com/docker/compose/releases/download/v%v/docker-compose-linux-{{ node_docker_plugin_arch }}"
+    asset_url: "github.com/docker/compose/releases/download/v%v/docker-compose-linux-{{ node_docker_compose_arch }}"
     asset_dest: "{{ node_docker_cli_plugin_dir }}/docker-compose"
     asset_extract: false
     asset_version_cmd: "version --short"
