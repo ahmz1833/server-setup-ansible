@@ -51,7 +51,7 @@ ansible-galaxy collection install ahmz1833.server_setup:==1.0.0
 collections:
   - name: https://github.com/ahmz1833/server-setup.git
     type: git
-    version: main
+    version: master
 ```
 
 ```bash
