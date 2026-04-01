@@ -39,7 +39,8 @@
             mirrors = json.loads(os.environ.get("MIRRORS_JSON", "{}"))
             files = json.loads(os.environ.get("FILES_JSON", "[]"))
         except Exception as e:
-            sys.exit(0)
+            sys.stderr.write("Failed to parse MIRRORS_JSON/FILES_JSON: %s\n" % e)
+            sys.exit(1)
         changed = False
         def process_list_file(filepath):
             global changed
