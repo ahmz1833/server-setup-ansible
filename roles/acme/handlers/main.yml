@@ -5,6 +5,7 @@
     daemon_reload: true
   when: ansible_facts.get('service_mgr', '') == 'systemd'
   listen: "systemd daemon-reload"
+  become: true
 
 # Flexible certificate reload handler
 - name: Reload certificates
