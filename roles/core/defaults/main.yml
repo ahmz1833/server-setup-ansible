@@ -164,6 +164,10 @@ core_ssh_allow_users: []
 # -----------------------------------------------------------------------------
 core_manage_sysctl: true
 
+# BBR needs a kernel with tcp_bbr; set false on minimal VPS / old kernels to avoid
+# sysctl --system failing on net.ipv4.tcp_congestion_control / default_qdisc.
+core_sysctl_enable_bbr: true
+
 # Base sysctl settings
 core_sysctl_base:
   # Security

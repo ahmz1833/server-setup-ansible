@@ -22,8 +22,8 @@
         state: started
         enabled: true
 
-- name: Configure NTP (RedHat/CentOS)
-  when: ansible_facts['os_family'] == 'RedHat'
+- name: Configure NTP (RedHat / SUSE / Arch Linux)
+  when: ansible_facts['os_family'] in ['RedHat', 'Suse', 'Archlinux']
   block:
     - name: Install chrony
       ansible.builtin.package:

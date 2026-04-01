@@ -1,9 +1,24 @@
 ---
+- name: Build effective sysctl base (optional BBR keys)
+  ansible.builtin.set_fact:
+    _core_sysctl_base_effective: >-
+      {{
+        core_sysctl_base
+        if (core_sysctl_enable_bbr | default(true) | bool)
+        else (
+          core_sysctl_base
+          | dict2items
+          | rejectattr('key', 'equalto', 'net.core.default_qdisc')
+          | rejectattr('key', 'equalto', 'net.ipv4.tcp_congestion_control')
+          | items2dict
+        )
+      }}
+
 - name: Build current sysctl rules
   ansible.builtin.set_fact:
     core_sysctl: >-
       {{
-        core_sysctl_base
+        _core_sysctl_base_effective
         | combine(core_sysctl_extra)
         | combine({
             'net.ipv6.conf.all.disable_ipv6': ('0' if core_enable_ipv6 else '1'),
