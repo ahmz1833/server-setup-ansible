@@ -4,7 +4,7 @@
     - name: "Locate installed binary path: {{ asset_name }}"
       ansible.builtin.command: "which {{ asset_name }}"
       register: _asset_which
-      ignore_errors: true
+      failed_when: false
       changed_when: false
       when:
         - asset_dest is undefined
@@ -47,7 +47,7 @@
                 else (_asset_dest | dirname) + '/.' + asset_name + '_ansible_version'
               }}
           register: _asset_version_file
-          ignore_errors: true
+          failed_when: false
           when: (asset_type | default('binary')) in ['file', 'package']
 
         - name: "Parse installed version: {{ asset_name }}"
@@ -349,19 +349,17 @@
                 owner: root
                 group: root
 
+            # Trailing slash matters: without it, Ansible copies the directory node
+            # itself under dest (e.g. .../docker/tmp.xxx/) instead of its contents.
             - name: "Copy package contents to target destination: {{ asset_name }}"
               ansible.builtin.copy:
                 src: >-
                   {{
-                    (
-                      _asset_remote_tempdir.path
-                      if _asset_stage_locally
-                      else (_asset_tempdir.path ~ '/' ~ _asset_resolved_extract_src)
-                    )
-                    ~ (
-                      '' if _asset_stage_locally
-                      or _asset_resolved_extract_src.endswith('/')
-                      else '/'
+                    (_asset_remote_tempdir.path ~ '/')
+                    if _asset_stage_locally
+                    else (
+                      (_asset_tempdir.path ~ '/' ~ _asset_resolved_extract_src)
+                      ~ ('' if _asset_resolved_extract_src.endswith('/') else '/')
                     )
                   }}
                 dest: "{{ _asset_dest }}/"
