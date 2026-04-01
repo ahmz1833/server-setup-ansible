@@ -1,4 +1,4 @@
-# Ansible role: `ahmz.server_setup.acme`
+# Ansible role: `ahmz1833.server_setup.acme`
 
 Let’s Encrypt (ACME v2) certificate issuance and renewal with **cryptography on the Ansible controller**. The managed host only receives the final key and full chain; it does **not** need `certbot`, `acme.sh`, or similar.
 
@@ -114,7 +114,7 @@ Each item describes one certificate.
           - "*.example.com"
         challenge: dns-01
   roles:
-    - role: ahmz.server_setup.acme
+    - role: ahmz1833.server_setup.acme
 ```
 
 Default remote layout: `fullchain.pem` and `privkey.pem` under `/etc/ssl/certs/example.com/` (unless you set `cert_dir` / explicit paths).
@@ -137,7 +137,7 @@ Default remote layout: `fullchain.pem` and `privkey.pem` under `/etc/ssl/certs/e
         privkey_path: /opt/myapp/ssl/key.pem
         renew_days: 15
   roles:
-    - role: ahmz.server_setup.acme
+    - role: ahmz1833.server_setup.acme
 ```
 
 ---
@@ -158,7 +158,7 @@ Use a normal play with `hosts: localhost`, `connection: local`, and `become: tru
       - domains: [example.com]
         challenge: http-01
   roles:
-    - role: ahmz.server_setup.acme
+    - role: ahmz1833.server_setup.acme
 ```
 
 ---

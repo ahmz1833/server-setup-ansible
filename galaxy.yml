@@ -1,28 +1,43 @@
 ---
-namespace: ahmz
+namespace: ahmz1833
 name: server_setup
 version: 1.0.0
 readme: README.md
 authors:
   - AHMZ <ahmz.ut@gmail.com>
+
 description: >-
-  Ansible collection for provisioning and hardening Linux servers.
-  Includes roles for core system setup, networking/tunnel services,
-  Nginx with WAF, ACME/SSL certificate management, and Docker-based
-  application deployment.
+  Linux server provisioning and hardening: core (SSH, firewall, sysctl, users),
+  node (Docker static engine, sing-box, GOST, X-UI, tools, node_exporter), Nginx
+  with ModSecurity CRS and observability, ACME certificates, declarative Docker
+  apps, SSH Docker sandboxes, plus a shared asset installer role for binaries and
+  archives.
+
 license:
   - MIT
+
 tags:
   - linux
   - server
   - hardening
   - nginx
+  - waf
   - docker
   - acme
   - ssl
+  - tls
   - firewall
   - monitoring
+  - containers
+  - ssh
+  - sandbox
+  - proxy
+  - tunnel
+
 repository: https://github.com/ahmz1833/server-setup
+documentation: https://github.com/ahmz1833/server-setup/blob/main/README.md
+homepage: https://github.com/ahmz1833/server-setup
+issues: https://github.com/ahmz1833/server-setup/issues
 
 dependencies:
   community.general: ">=5.0.0"
@@ -36,6 +51,7 @@ build_ignore:
   - .git
   - .gitignore
   - .vscode
+  - .cursor
   - "*.tar.gz"
   - __pycache__
   - .pytest_cache

@@ -1,6 +1,6 @@
-# Ansible role: `ahmz.server_setup.node`
+# Ansible role: `ahmz1833.server_setup.node`
 
-Optional **host-level services**: sing-box, shell tools + bootstrap, **GOST**, **X-UI**, **Docker** (static engine + Buildx/Compose plugins), and **Prometheus node_exporter**. Binaries are deployed idempotently via the **`ahmz.server_setup.asset`** role (same collection).
+Optional **host-level services**: sing-box, shell tools + bootstrap, **GOST**, **X-UI**, **Docker** (static engine + Buildx/Compose plugins), and **Prometheus node_exporter**. Binaries are deployed idempotently via the **`ahmz1833.server_setup.asset`** role (same collection).
 
 Designed for **systemd** Linux. **Gather facts** must be enabled so `ansible_facts['architecture']` and OS family checks work.
 
@@ -10,7 +10,7 @@ Designed for **systemd** Linux. **Gather facts** must be enabled so `ansible_fac
 
 | Requirement | Notes |
 |-------------|--------|
-| **Collection** | This role lives in `ahmz.server_setup`; install the collection and its [declared dependencies](https://github.com/ahmz1833/server-setup/blob/main/galaxy.yml) (`community.general`, `community.crypto`, `ansible.posix`, …). |
+| **Collection** | This role lives in `ahmz1833.server_setup`; install the collection and its [declared dependencies](https://github.com/ahmz1833/server-setup/blob/main/galaxy.yml) (`community.general`, `community.crypto`, `ansible.posix`, …). |
 | **Role dependency** | **`asset`** (declared in `meta/main.yml`) for downloads, optional local staging, and package-mode extracts. |
 | **Target** | **systemd**; privilege escalation (`become`) for installs, units, and `/usr/local` paths. |
 | **Docker engine** | Static tarball from Docker is **glibc-linked**. The role **fails** the install path on **Alpine/musl** (use distro Docker or disable `node_docker_enabled`). |
@@ -158,7 +158,7 @@ Unmapped CPU families fall back to the raw architecture string (downloads may **
     node_gost_config: {}
 
   roles:
-    - role: ahmz.server_setup.node
+    - role: ahmz1833.server_setup.node
 ```
 
 More patterns: **`roles/node/examples/`** (`docker.yml`, `singbox.yml`, `gost.yml`).

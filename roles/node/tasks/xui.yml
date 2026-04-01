@@ -1,7 +1,7 @@
 ---
 - name: Install x-ui package via remote_asset role
   ansible.builtin.include_role:
-    name: ahmz.server_setup.asset
+    name: ahmz1833.server_setup.asset
   vars:
     asset_name: "x-ui"
     asset_type: "package"

@@ -1,4 +1,4 @@
-# Ansible role: `ahmz.server_setup.nginx`
+# Ansible role: `ahmz1833.server_setup.nginx`
 
 Production-oriented Nginx reverse proxy and edge stack for **Debian and Ubuntu**: packages, global tuning snippets, YAML-driven virtual hosts, optional ModSecurity (OWASP CRS), real client IP handling, JSON access logs with optional Promtail → Prometheus metrics, rolling configuration backups, and optional `nginx-prometheus-exporter`.
 
@@ -332,7 +332,7 @@ More patterns (headers, redirects, static sites, raw `extra_config`) live in **`
 ```yaml
 - hosts: edge
   roles:
-    - role: ahmz.server_setup.nginx
+    - role: ahmz1833.server_setup.nginx
       vars:
         nginx_managed: true
         nginx_waf_install: true

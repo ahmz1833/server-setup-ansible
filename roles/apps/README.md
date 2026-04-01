@@ -1,4 +1,4 @@
-# Ansible role: `ahmz.server_setup.apps`
+# Ansible role: `ahmz1833.server_setup.apps`
 
 Declarative **Docker container** lifecycle on the target host using **`community.docker`**: validate definitions, log in to registries, create networks, resolve **`depends_on`** order, deploy with **`docker_container`**, optionally wait on Docker **health checks**, and optionally **prune** containers or networks that are not part of **`apps_list`**.
 
@@ -216,7 +216,7 @@ More snippets: **`examples/apps.yml`**.
 ```yaml
 - hosts: app_servers
   roles:
-    - role: ahmz.server_setup.apps
+    - role: ahmz1833.server_setup.apps
       vars:
         apps_base_path: /opt/production
         apps_list:

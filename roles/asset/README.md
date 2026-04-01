@@ -1,4 +1,4 @@
-# Ansible role: `ahmz.server_setup.asset`
+# Ansible role: `ahmz1833.server_setup.asset`
 
 Idempotent **download, extract, and install** helper for upstream release artifacts. Used across this collection (`node`, `nginx`, `acme`, …) instead of pinning every tool in OS package managers.
 
@@ -84,7 +84,7 @@ Role defaults live in `defaults/main.yml`; callers override via `include_role` /
 ```yaml
 - name: Install docker-compose plugin binary
   ansible.builtin.include_role:
-    name: ahmz.server_setup.asset
+    name: ahmz1833.server_setup.asset
   vars:
     asset_name: docker-compose
     asset_version: "5.1.1"
@@ -100,7 +100,7 @@ Role defaults live in `defaults/main.yml`; callers override via `include_role` /
 ```yaml
 - name: Install sing-box
   ansible.builtin.include_role:
-    name: ahmz.server_setup.asset
+    name: ahmz1833.server_setup.asset
   vars:
     asset_name: sing-box
     asset_version: "1.13.3"
@@ -119,7 +119,7 @@ Role defaults live in `defaults/main.yml`; callers override via `include_role` /
 ```yaml
 - name: Install static bundle tree
   ansible.builtin.include_role:
-    name: ahmz.server_setup.asset
+    name: ahmz1833.server_setup.asset
   vars:
     asset_name: myapp
     asset_type: package

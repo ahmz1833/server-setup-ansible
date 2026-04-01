@@ -1,4 +1,4 @@
-# Ansible role: `ahmz.server_setup.sandbox`
+# Ansible role: `ahmz1833.server_setup.sandbox`
 
 SSH gateway into **per-guest Docker containers**: one locked **host** Linux user, **forced commands** in `authorized_keys`, a **dedicated `sshd` port**, and **no** port/X11/agent forwarding. Guests never receive a host shell; they land in `sandbox-<name>` with UID/GID aligned to the host sandbox user.
 
@@ -107,9 +107,9 @@ Use **`-i`** when multiple keys are loaded so the correct key matches the intend
         upstream: "http://127.0.0.1:8081"
 
   roles:
-    - role: ahmz.server_setup.core
-    - role: ahmz.server_setup.sandbox
-    - role: ahmz.server_setup.nginx
+    - role: ahmz1833.server_setup.core
+    - role: ahmz1833.server_setup.sandbox
+    - role: ahmz1833.server_setup.nginx
 ```
 
 ---

@@ -1,4 +1,4 @@
-# Ansible role: `ahmz.server_setup.core`
+# Ansible role: `ahmz1833.server_setup.core`
 
 Baseline **Linux server provisioning**: identity (hostname, timezone), packages, optional swap, users and SSH hardening, **sysctl**, **ipset**, **iptables** INPUT firewall, **fail2ban**, and managed **cron** jobs.
 
@@ -145,7 +145,7 @@ If `core_manage_nameservers` is true, the role may **remove a symlink** and writ
           - "10.0.0.0/8"
 
   roles:
-    - role: ahmz.server_setup.core
+    - role: ahmz1833.server_setup.core
 ```
 
 ---

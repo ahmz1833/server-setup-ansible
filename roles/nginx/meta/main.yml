@@ -29,4 +29,4 @@ galaxy_info:
     - reverseproxy
 
 dependencies:
-  - role: ahmz.server_setup.asset
+  - role: ahmz1833.server_setup.asset

@@ -1,66 +1,110 @@
-# Ansible Collection: ahmz.server_setup
+# Ansible collection: `ahmz1833.server_setup`
 
-Ansible collection for provisioning and hardening Linux servers. Includes roles for core system setup, networking/tunnel services, Nginx with WAF, ACME/SSL certificate management, and Docker-based application deployment.
+Roles for **Debian/Ubuntu**-style hosts: base hardening, edge Nginx (optional ModSecurity), TLS automation, Docker workloads, and optional SSH-into-container sandboxes. Binaries and static bundles are installed through a shared **`asset`** role used internally by **`node`**, **`nginx`**, and **`acme`**.
+
+**Galaxy namespace:** [`ahmz1833`](https://galaxy.ansible.com/ui/namespaces/ahmz1833/) · **Collection name:** `server_setup` · **FQCN prefix:** `ahmz1833.server_setup.<role>`
+
+---
 
 ## Requirements
 
-- Ansible >= 2.14
-- Python >= 3.9
+| | |
+|--|--|
+| **Ansible** | 2.14+ (`ansible-core` compatible) |
+| **Python** | 3.9+ on the controller |
+| **Targets** | Roles are written for **systemd**-based Linux; several roles assume **Debian/Ubuntu** packages or paths—see each role README. |
 
-### Collection Dependencies
+### Collection dependencies
 
-Installed automatically when using `ansible-galaxy`:
+Declared in `galaxy.yml`; install with the collection or via `ansible-galaxy collection install -r requirements.yml`:
 
-- `community.general` >= 5.0.0
-- `community.crypto` >= 2.0.0
-- `community.docker` >= 3.0.0
-- `ansible.posix` >= 1.4.0
-- `ansible.utils` >= 2.0.0
+| Collection | Purpose (examples) |
+|------------|---------------------|
+| `community.general` | `archive`, and other helpers |
+| `community.crypto` | TLS / crypto (e.g. ACME) |
+| `community.docker` | `docker_container`, `docker_network`, … |
+| `ansible.posix` | `sysctl`, `authorized_key`, … |
+| `ansible.utils` | IP / text utilities where used |
+
+---
 
 ## Installation
 
-### From Galaxy (when published)
+### From Ansible Galaxy (after publish)
 
 ```bash
-ansible-galaxy collection install ahmz.server_setup
+ansible-galaxy collection install ahmz1833.server_setup
 ```
 
-### From Git Repository
+Pin a version:
 
-Add to your project's `requirements.yml`:
+```bash
+ansible-galaxy collection install ahmz1833.server_setup:==1.0.0
+```
+
+### From Git
+
+`requirements.yml`:
 
 ```yaml
+---
 collections:
   - name: https://github.com/ahmz1833/server-setup.git
     type: git
-    version: master
+    version: main
 ```
-
-Then install:
 
 ```bash
 ansible-galaxy collection install -r requirements.yml
 ```
 
-### Build and Install Locally
+Use your repository’s default branch (`main`, `master`, or a tag) for `version`.
+
+### Build and install from a checkout
 
 ```bash
-cd /path/to/this/repo
+cd /path/to/server-setup
 ansible-galaxy collection build
-ansible-galaxy collection install ahmz-server_setup-*.tar.gz
+ansible-galaxy collection install ahmz1833-server_setup-1.0.0.tar.gz
 ```
 
-## Roles
+The artifact name is **`{namespace}-{name}-{version}.tar.gz`**.
 
-### `ahmz.server_setup.core`
+### Publishing to Galaxy (maintainers)
 
-Core server hardening: timezone, hostname, APT mirrors (with Iran/Arvan mirror support), package installation, user management, SSH hardening, iptables firewall, sysctl tuning, and fail2ban.
+1. Bump **`version`** in `galaxy.yml` (semantic versioning).
+2. `ansible-galaxy collection build`
+3. `ansible-galaxy collection publish ahmz1833-server_setup-<version>.tar.gz --token <GALAXY_API_TOKEN>`
+
+Ensure the **`namespace`** in `galaxy.yml` matches your Galaxy namespace (**`ahmz1833`**).
+
+---
+
+## Roles overview
+
+| Role | Purpose |
+|------|---------|
+| **`ahmz1833.server_setup.core`** | Timezone, APT mirrors, packages, users, SSH hardening, iptables/nftables-style firewall, sysctl, fail2ban. |
+| **`ahmz1833.server_setup.node`** | Sing-box, GOST, X-UI, Docker (static engine + plugins), shell tools, `node_exporter`; uses **`asset`** for downloads. |
+| **`ahmz1833.server_setup.nginx`** | Debian Nginx, ModSecurity CRS, vhosts from `nginx_sites`, exporter/Promtail optional; depends on **`asset`**. |
+| **`ahmz1833.server_setup.acme`** | DNS-01 / HTTP-01 certificates; uses **`asset`** where applicable. |
+| **`ahmz1833.server_setup.apps`** | Declarative `docker_container` stacks: deps, health wait, preserve mode, optional prune. |
+| **`ahmz1833.server_setup.sandbox`** | SSH on a dedicated port into per-user Docker sandboxes (`blockinfile` on `sshd_config`). |
+| **`ahmz1833.server_setup.asset`** | Generic download / extract / install helper (binaries, files, packages); dependency of other roles. |
+
+Each role has its own **`roles/<name>/README.md`** for variables and examples.
+
+---
+
+## Quick examples
+
+### Core
 
 ```yaml
 - hosts: all
   become: true
   roles:
-    - role: ahmz.server_setup.core
+    - role: ahmz1833.server_setup.core
       vars:
         is_iran: false
         core_manage_users: true
@@ -68,82 +112,106 @@ Core server hardening: timezone, hostname, APT mirrors (with Iran/Arvan mirror s
         core_manage_firewall: true
 ```
 
-### `ahmz.server_setup.node`
-
-Node-level services: sing-box proxy/tunnel, GOST tunnel, Docker engine, Prometheus node_exporter, shell bootstrap and utility tools.
+### Node
 
 ```yaml
 - hosts: all
   become: true
   roles:
-    - role: ahmz.server_setup.node
+    - role: ahmz1833.server_setup.node
       vars:
         node_docker_enabled: true
         node_gost_enabled: true
         node_exporter_enabled: true
 ```
 
-### `ahmz.server_setup.nginx`
-
-Full Nginx setup: installation, ModSecurity WAF, global tuning, SSL/TLS, per-site vhost generation, custom error pages, nginx-prometheus-exporter, and Promtail log shipping.
+### Nginx
 
 ```yaml
-- hosts: all
+- hosts: edge
   become: true
   roles:
-    - role: ahmz.server_setup.nginx
+    - role: ahmz1833.server_setup.nginx
       vars:
         nginx_managed: true
         nginx_sites:
-          - domain: "example.com"
+          - domain: example.com
             ssl_enabled: true
             upstream: "http://127.0.0.1:8080"
 ```
 
-### `ahmz.server_setup.acme`
-
-ACME/Let's Encrypt certificate issuance and renewal via DNS-01 or HTTP-01 challenges.
+### ACME
 
 ```yaml
 - hosts: all
   become: true
   roles:
-    - role: ahmz.server_setup.acme
+    - role: ahmz1833.server_setup.acme
       vars:
-        acme_account_email: "admin@example.com"
+        acme_account_email: admin@example.com
         acme_certificates:
           - domains:
-              - "example.com"
+              - example.com
               - "*.example.com"
 ```
 
-### `ahmz.server_setup.apps`
-
-Docker container lifecycle manager: creates directories, ensures networks, reconciles container state, and prunes unmanaged containers.
+### Apps (`apps_list`)
 
 ```yaml
-- hosts: all
+- hosts: app_servers
   become: true
   roles:
-    - role: ahmz.server_setup.apps
+    - role: ahmz1833.server_setup.apps
       vars:
-        apps_to_deploy:
-          - name: myapp
-            image: myapp:latest
+        apps_list:
+          - name: web
+            image: nginx:alpine
             ports:
               - "8080:80"
 ```
 
-## Global Variables
+### Sandbox
 
-These variables are referenced across multiple roles and should be set at the inventory or playbook level:
+```yaml
+- hosts: all
+  become: true
+  roles:
+    - role: ahmz1833.server_setup.sandbox
+      vars:
+        sandbox_ssh_port: 2222
+        sandbox_users:
+          - name: guest1
+            ssh_keys:
+              - "ssh-ed25519 AAAA... your-key"
+            image: ubuntu:24.04
+```
 
-| Variable | Default | Description |
-|---|---|---|
-| `is_iran` | `false` | Enables Iran-specific mirrors and download proxying |
-| `enable_ipv6` | `false` | Enables IPv6 support across all roles |
-| `primary_user` | `root` | Primary admin user for the server |
-| `download_locally` | `false` | Download binaries on controller first, then copy to target |
+Connect as **`sandbox@host`** (or your `sandbox_shared_user`) on **`sandbox_ssh_port`**; see the sandbox role README.
+
+---
+
+## Cross-role playbook variables
+
+Set at play, group, or host level when you want shared behavior:
+
+| Variable | Typical use |
+|----------|-------------|
+| `is_iran` | **`core`**: timezone/mirrors; **`node`**: `node_internet_restricted`; **`nginx`**: `nginx_download_locally` (via default expression). |
+| `enable_ipv6` | **`core`**: sysctl/firewall IPv6; **`nginx`**: `listen [::]:…` when enabled. |
+| `primary_user` | **`core`**: `core_primary_user` (protected user, SSH keys). |
+| `download_locally` | **`node`**: fetch artifacts on the controller / cache (`node_download_locally`); also referenced by roles that pass it into **`asset`**. |
+
+Exact wiring is in each role’s `defaults/main.yml`.
+
+---
+
+## Repository layout
+
+- **`galaxy.yml`** — collection metadata for `ansible-galaxy collection build` / publish.
+- **`roles/`** — one directory per role (`core`, `node`, `nginx`, `acme`, `apps`, `sandbox`, `asset`).
+- **`playbooks/`** — optional sample playbooks (not required to use the collection).
+
+---
 
 ## License
 
