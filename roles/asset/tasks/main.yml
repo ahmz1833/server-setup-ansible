@@ -56,7 +56,7 @@
               {%- if (asset_type | default('binary')) == 'binary'
                     and _asset_version_binary is defined -%}
                 {%- set _out = _asset_version_binary.stdout | default('') ~ _asset_version_binary.stderr | default('') -%}
-                {%- set _match = _out | regex_search(asset_version_regex, '\\1') -%}
+                {%- set _match = _out | regex_search(asset_version_regex, '\1') -%}
                 {{ (_match | first) if _match else '' }}
               {%- elif (asset_type | default('binary')) in ['file', 'package']
                     and _asset_version_file is defined -%}
