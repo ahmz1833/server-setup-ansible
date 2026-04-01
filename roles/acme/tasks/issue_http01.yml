@@ -279,5 +279,6 @@
           when:
             - acme_port80_pid.stdout | default('') | length > 0
             - acme_port80_prompt.user_input | default('') | lower == 'auto'
+            - acme_service_stop is defined
             - acme_service_stop is succeeded
           become: true
