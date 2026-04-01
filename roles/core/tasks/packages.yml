@@ -14,8 +14,10 @@
           - /etc/apt/
           - /etc/apt/sources.list.d/
         patterns:
-          - "*.list"
-          - "*.sources"
+          - "sources.list"
+          - "debian.sources"
+          - "ubuntu.sources"
+        use_regex: false
       register: core_apt_files
 
     - name: Backup APT source files before modification
