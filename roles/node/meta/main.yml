@@ -4,7 +4,10 @@ galaxy_info:
   author: AHMZ
   description: >-
     Node-level services — sing-box proxy/tunnel, GOST tunnel, Docker
-    engine, Prometheus node_exporter, shell bootstrap and utility tools.
+    engine (static tgz from Docker, glibc-linked), Prometheus node_exporter,
+    shell bootstrap and utility tools. Requires systemd. Static Docker install
+    is refused on Alpine/musl; override node_tools_packages on RPM-based distros
+    where Debian package names differ.
   license: MIT
   min_ansible_version: "2.14"
   platforms:
@@ -17,6 +20,12 @@ galaxy_info:
       versions:
         - bullseye
         - bookworm
+        - trixie
+    - name: EL
+      versions:
+        - "8"
+        - "9"
+        - "10"
   galaxy_tags:
     - docker
     - proxy
@@ -24,4 +33,5 @@ galaxy_info:
     - monitoring
     - tools
 
-dependencies: []
+dependencies:
+  - role: asset

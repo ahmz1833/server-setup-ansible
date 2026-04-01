@@ -1,51 +1,133 @@
-# Ansible Role: ahmz.server_setup.node
+# Ansible role: `ahmz.server_setup.node`
 
-Middle-layer services deployment including networking tunnels, monitoring, Docker runtime, and administrative shells.
+Optional **host-level services**: sing-box, shell tools + bootstrap, **GOST**, **X-UI**, **Docker** (static engine + Buildx/Compose plugins), and **Prometheus node_exporter**. Binaries are deployed idempotently via the **`ahmz.server_setup.asset`** role (same collection).
 
-## Description
+Designed for **systemd** Linux. **Gather facts** must be enabled so `ansible_facts['architecture']` and OS family checks work.
 
-The `node` role handles the installation and configuration of services running directly on the host. It utilizes the `ahmz.server_setup.asset` role to idempotently download and deploy required binaries.
+---
 
 ## Requirements
-* **Dependency**: `ahmz.server_setup.asset`
-* **Local Requirement**: If utilizing `sing-box` outbound links, `vpnparser` must be installed on the Ansible control node:
-  `go install github.com/ahmz1833/vpnparser@latest`
 
-## Available Tags
+| Requirement | Notes |
+|-------------|--------|
+| **Collection** | This role lives in `ahmz.server_setup`; install the collection and its [declared dependencies](https://github.com/ahmz1833/server-setup/blob/main/galaxy.yml) (`community.general`, `community.crypto`, `ansible.posix`, …). |
+| **Role dependency** | **`asset`** (declared in `meta/main.yml`) for downloads, optional local staging, and package-mode extracts. |
+| **Target** | **systemd**; privilege escalation (`become`) for installs, units, and `/usr/local` paths. |
+| **Docker engine** | Static tarball from Docker is **glibc-linked**. The role **fails** the install path on **Alpine/musl** (use distro Docker or disable `node_docker_enabled`). |
+| **Sing-box + `links`** | If you use `node_singbox_outbounds.links`, **`vpnparser`** must be on the **Ansible controller** (`go install github.com/ahmz1833/vpnparser@latest` and `PATH` includes `$GOPATH/bin`). |
 
-* `node`: Runs the entire role.
-* `node-singbox`: Deploy and configure sing-box.
-* `node-tools`: Install packages (btop, jq, etc.) and run shell bootstrap.
-* `node-bootstrap`: Specific to the ZSH/dotfiles bootstrap script.
-* `node-gost`: Deploy GOST tunnel.
-* `node-xui`: Deploy 3x-ui panel.
-* `node-docker`: Install Docker Engine and Compose.
-* `node-exporter`: Deploy Prometheus Node Exporter.
+---
 
-## Role Variables
+## Playbook-level variables (consumed via defaults)
 
-### Service Toggles
-Set to `true` to enable a specific service:
-| Variable | Default | Variable | Default |
-|---|---|---|---|
-| `node_singbox_install` | `false` | `node_docker_enabled` | `true` |
-| `node_gost_install` | `false` | `node_exporter_install` | `true` |
-| `node_xui_install` | `false` | `node_bootstrap_enabled` | `true` |
+| Playbook var | Maps to | Purpose |
+|--------------|---------|---------|
+| `primary_user` | `node_primary_user` | Default non-root user for docker group, bootstrap, etc. |
+| `download_locally` | `node_download_locally` | Passed to `asset` (stage on controller, push to target). |
+| `is_iran` | `node_internet_restricted` | Mirrors, sing-box install toggle, bootstrap URL, … |
+| `enable_ipv6` | `node_enable_ipv6` | Docker `daemon.json` IPv6 behavior. |
 
-*(Note: Every `_install` variable has a corresponding `_enabled` variable to control the systemd service state).*
+---
 
-### Key Configurations
-* **Docker (`node_docker_bip`)**: Defines the default bridge IP to prevent subnet conflicts.
-* **X-UI (`node_xui_port`, `node_xui_web_base_path`)**: Defines the panel's administrative access points.
-* **Sing-box (`node_singbox_outbounds`)**: Accepts raw v2ray links or standard JSON configurations.
+## Task order and tags
 
-## Example Playbook
+`tasks/main.yml` runs (when each section’s install/toggle allows):
+
+1. **sing-box** — `node_singbox_install`
+2. **tools** — packages + fzf/eza/zoxide/starship (+ lazydocker if Docker on) + optional bootstrap
+3. **GOST** — `node_gost_install`
+4. **X-UI** — `node_xui_install`
+5. **Docker** — `node_docker_enabled`
+6. **node_exporter** — `node_exporter_install`
+
+| Tag | Scope |
+|-----|--------|
+| `node` | Full role |
+| `node-singbox` | sing-box |
+| `node-tools` | OS packages + CLI assets |
+| `node-bootstrap` | Dotfiles/bootstrap script (subset of tools) |
+| `node-gost` | GOST |
+| `node-xui` | X-UI |
+| `node-docker` | Docker engine + plugins + units |
+| `node-exporter` | node_exporter |
+
+---
+
+## Install toggles and service toggles
+
+| Install / feature | Default (see `defaults/main.yml`) | Service / runtime toggle |
+|-------------------|-----------------------------------|---------------------------|
+| `node_singbox_install` | `{{ node_internet_restricted }}` (often `is_iran`) | `node_singbox_enabled` |
+| `node_gost_install` | `true` | `node_gost_enabled` |
+| `node_xui_install` | `false` | `node_xui_enabled` |
+| `node_docker_enabled` | `true` | `node_docker_enabled` (also starts/stops units) |
+| `node_exporter_install` | `true` | `node_exporter_enabled` |
+| `node_bootstrap_enabled` | `true` | — |
+| `node_lazydocker_install` | `{{ node_docker_enabled }}` | — |
+
+Use **`_install`** to pull in files/packages; use **`_enabled`** (where present) to control **systemd** start/enabled.
+
+---
+
+## Architecture and downloads
+
+Under **`defaults/main.yml` → ARCHITECTURE**, maps translate `ansible_facts['architecture']` into upstream names for:
+
+- **Docker static** tarball (`download.docker.com` … `x86_64`, `aarch64`, `armhf`, …)
+- **Buildx** / **Compose** plugin filenames (different suffix rules)
+- **Tools** (eza/zoxide/starship/lazydocker/fzf/gost) triples or Go-style suffixes
+
+Unmapped CPU families fall back to the raw architecture string (downloads may **404**). Override the relevant `node_arch_*` or `node_docker_*` fact per host if needed.
+
+---
+
+## Sing-box
+
+- **`node_singbox_libc`**: `auto` (Alpine → `-musl` tarball), `glibc`, or `musl`.
+- **DNS / outbounds / TUN**: see comments in `defaults/main.yml` and **`examples/singbox.yml`**.
+
+---
+
+## Tools and bootstrap
+
+- **`node_tools_packages`**: names match **Debian/Ubuntu**; replace the list on **RHEL/Alpine** if packages differ (`netcat-openbsd` → `nmap-ncat`, etc.).
+- **`node_bootstrap_script_url`**: switches with `node_internet_restricted` (alternate mirror vs GitHub).
+
+---
+
+## Docker
+
+- Engine from **static tgz** under `/usr/local/lib/docker`, symlinks in `/usr/local/bin`, **containerd** + **docker** **systemd** units from templates.
+- **Buildx** / **Compose** as CLI plugins under `/usr/local/libexec/docker/cli-plugins` with shims in `/usr/local/bin`.
+- Version gate: if installed engine **meets** `node_docker_min_version`, the heavy install block is skipped (plugins still checked via `asset`).
+- **`examples/docker.yml`**: network pools, logging, metrics, Compose versions.
+
+---
+
+## X-UI and GOST
+
+- **X-UI**: panel settings are applied from role variables (`node_xui_*`); see **`defaults/main.yml`** and `tasks/xui.yml`.
+- **GOST**: configuration is YAML in `node_gost_config`; see **`examples/gost.yml`**.
+
+---
+
+## node_exporter
+
+- Binds to **`node_exporter_listen_address`** (default localhost).
+- Collectors: **`node_exporter_enabled_collectors`** / **`node_exporter_disabled_collectors`** / **`node_exporter_extra_args`**.
+
+---
+
+## Example playbook
 
 ```yaml
-- name: Setup Node Services
-  hosts: proxies
+- name: Node services
+  hosts: app_servers
+  become: true
   vars:
-    # Docker Configuration
+    primary_user: deploy
+    download_locally: false
+
     node_docker_enabled: true
     node_docker_bip: "172.29.0.1/16"
     node_docker_default_address_pools:
@@ -70,11 +152,25 @@ Set to `true` to enable a specific service:
     node_exporter_enabled: true
     node_exporter_enabled_collectors:
       - systemd
-      - processes
+
+    node_gost_install: true
+    node_gost_enabled: false
+    node_gost_config: {}
 
   roles:
-    - ahmz.server_setup.node
+    - role: ahmz.server_setup.node
 ```
 
+More patterns: **`roles/node/examples/`** (`docker.yml`, `singbox.yml`, `gost.yml`).
+
+---
+
+## Handlers
+
+Reload/restart **docker**, **containerd**, **sing-box**, **gost**, **x-ui**, **node_exporter** when templates or installs notify them; includes **systemd daemon-reload** where needed.
+
+---
+
 ## License
+
 MIT
