@@ -1,11 +1,18 @@
 ---
+collections:
+  - community.crypto
+
 galaxy_info:
   role_name: acme
   author: AHMZ
   description: >-
     ACME/Let's Encrypt certificate issuance and renewal via DNS-01
-    or HTTP-01 challenges using community.crypto modules. All crypto
-    operations happen on the Ansible controller.
+    or HTTP-01 challenges using community.crypto (controller-side crypto).
+    Targets need Python/openssl dependencies for that collection, bash for
+    standalone HTTP-01, and privilege escalation to write certs and bind port 80.
+    Use acme_noninteractive for CI; DNS-01 still requires human or external DNS
+    automation. Windows targets are not supported.
+  license: MIT
   min_ansible_version: "2.14"
   platforms:
     - name: Ubuntu
@@ -17,6 +24,7 @@ galaxy_info:
       versions:
         - bullseye
         - bookworm
+        - trixie
     - name: EL
       versions:
         - "8"

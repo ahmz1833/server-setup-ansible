@@ -7,19 +7,24 @@
   delegate_to: localhost
   become: false
 
-- name: Generate domain private key locally
+- name: Generate domain private key locally (ECDSA P-256)
   community.crypto.openssl_privatekey:
     path: "{{ acme_local_cert_dir }}/privkey.pem"
-    size: 2048
+    type: ECC
+    curve: secp256r1
   delegate_to: localhost
   become: false
 
-- name: Generate CSR locally
+- name: Build SAN list including CN
+  ansible.builtin.set_fact:
+    acme_san_list: "{{ acme_current_all_domains | map('regex_replace', '^', 'DNS:') | list }}"
+
+- name: Generate CSR locally with all domains in SAN
   community.crypto.openssl_csr:
     path: "{{ acme_local_cert_dir }}/domain.csr"
     privatekey_path: "{{ acme_local_cert_dir }}/privkey.pem"
     common_name: "{{ acme_current_cn }}"
-    subject_alt_name: "{{ (acme_current_sans | length > 0) | ternary(acme_current_sans | map('regex_replace', '^', 'DNS:') | list, omit) }}"
+    subject_alt_name: "{{ acme_san_list }}"
   delegate_to: localhost
   become: false
 
@@ -27,7 +32,7 @@
   ansible.builtin.include_tasks: issue_dns01.yml
   when: acme_current_challenge == 'dns-01'
 
-- name: Execute HTTP-01 standalone challenge
+- name: Execute HTTP-01 challenge
   ansible.builtin.include_tasks: issue_http01.yml
   when: acme_current_challenge == 'http-01'
 
@@ -39,7 +44,7 @@
     owner: root
     group: root
   become: true
-  notify: Reload NGINX
+  notify: "reload certificates"
 
 - name: Deploy fullchain certificate to remote server
   ansible.builtin.copy:
@@ -49,4 +54,4 @@
     owner: root
     group: root
   become: true
-  notify: Reload NGINX
+  notify: "reload certificates"

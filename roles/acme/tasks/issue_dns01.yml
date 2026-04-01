@@ -17,15 +17,31 @@
 - name: Prompt for DNS and validate    # noqa: no-handler
   when: acme_challenge is changed
   block:
+    - name: Refuse DNS-01 in non-interactive mode
+      ansible.builtin.fail:
+        msg: >-
+          DNS-01 needs manual TXT records (or external automation). This role does
+          not create DNS records. Set acme_noninteractive false for interactive
+          mode, use challenge http-01 with a reachable webroot, or issue certs
+          another way in CI.
+      when: acme_noninteractive | default(false) | bool
+
     - name: Prompt for manual DNS TXT record creation
       ansible.builtin.pause:
-        prompt: >
-          [ACTION REQUIRED] DNS-01 Challenge for {{ acme_current_cn }}
-          {% if acme_current_sans | length > 0 %}
-          (Including SANs: {{ acme_current_sans | join(', ') }})
+        prompt: |
+          ╔══════════════════════════════════════════════════════════════════╗
+
+          ║                    DNS-01 CHALLENGE                              ║
+
+          ╚══════════════════════════════════════════════════════════════════╝
+
+          Domain: {{ acme_current_cn }}
+          {% if acme_current_all_domains | length > 1 %}
+
+          SANs:   {{ acme_current_all_domains[1:] | join(', ') }}
           {% endif %}
 
-          Please create the following TXT records:
+          Please create the following DNS TXT record(s):
 
           {% for k, v in acme_challenge.challenge_data.items() %}
           Name: {{ v['dns-01'].record }}
@@ -34,8 +50,15 @@
 
           {% endfor %}
 
+          Verify propagation (one per record):
+          {% for k, v in acme_challenge.challenge_data.items() %}
+          dig TXT {{ v['dns-01'].record }}
+          {% endfor %}
+
           Press ENTER when all records have propagated globally.
-      when: acme_challenge.challenge_data is defined
+      when:
+        - acme_challenge.challenge_data is defined
+        - not (acme_noninteractive | default(false) | bool)
       delegate_to: localhost
       become: false
 
