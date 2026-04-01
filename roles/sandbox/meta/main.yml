@@ -1,22 +1,27 @@
 ---
+collections:
+  - community.docker
+
 galaxy_info:
   role_name: sandbox
   author: AHMZ
   description: >-
-    Provides isolated, container-backed terminal environments for users via SSH,
-    mapping specific SSH keys to dedicated Docker containers without granting
-    host-level access.
+    SSH gateway into per-guest Docker sandboxes: one locked host user, forced
+    commands in authorized_keys, dedicated sshd port via blockinfile, no
+    forwarding, optional pruning of extra sandbox-* containers, and container
+    bootstrap (UID/GID alignment, sudo inside the guest).
   license: MIT
   min_ansible_version: "2.14"
   platforms:
     - name: Ubuntu
       versions: [focal, jammy, noble]
     - name: Debian
-      versions: [bullseye, bookworm]
+      versions: [bullseye, bookworm, trixie]
   galaxy_tags:
     - security
     - isolation
     - docker
     - ssh
+    - sandbox
 
 dependencies: []

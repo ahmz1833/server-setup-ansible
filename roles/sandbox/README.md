@@ -1,92 +1,133 @@
-# Ansible Role: ahmz.server_setup.sandbox
+# Ansible role: `ahmz.server_setup.sandbox`
 
-Provides fully isolated, container-backed terminal environments via SSH.
+SSH gateway into **per-guest Docker containers**: one locked **host** Linux user, **forced commands** in `authorized_keys`, a **dedicated `sshd` port**, and **no** port/X11/agent forwarding. Guests never receive a host shell; they land in `sandbox-<name>` with UID/GID aligned to the host sandbox user.
 
-## Description
-
-The `sandbox` role allows you to safely provide external users with a terminal experience on your server. Instead of creating host-level Linux users, it sets up a single secure SSH endpoint that intercepts incoming connections, maps the user's SSH key to a specific identity, and traps them instantly inside a dedicated Docker container.
-
-### Core Capabilities
-* **Hardened Isolation:** Incoming users never get a host shell. They are mapped seamlessly into their respective container via an isolated wrapper.
-* **Native Shell Experience:** Retains full PTY support, passes `TERM` and `LANG` correctly, and allows custom default shells (e.g., `/bin/zsh`) for a flawless terminal experience including full color and key mapping.
-* **Auto-Bootstrapping:** Automatically injects the exact host UID/GID mapping and installs passwordless `sudo` directly into the container upon creation, resolving "I have no name!" errors and preserving native file permissions on shared volumes.
-* **Port Segregation:** Listens on a dedicated SSH port (e.g., `2222`), separating sandbox traffic from administrative SSH traffic on port `22`.
-* **Tunneling Denied:** Explicitly blocks SSH port forwarding and X11 forwarding at the SSH daemon and `authorized_keys` level to prevent internal network scanning.
-* **App Role Parity:** Supports defining container resources, volumes, networks, and exposed ports natively.
+---
 
 ## Requirements
 
-* **Firewall Configuration:** The `sandbox_ssh_port` must be explicitly permitted through the server's firewall (e.g., added to `core_firewall_rules`).
+| Requirement | Notes |
+|-------------|--------|
+| **Ansible** | 2.14+ (`meta/main.yml`). |
+| **Collection** | **`community.docker`** — declared in role `meta/main.yml` (also a dependency of the collection `galaxy.yml`). |
+| **Docker** | Engine for **`docker_container`**; **`docker`** CLI on the target for **`docker cp`** / **`docker exec`** during in-container bootstrap. |
+| **OpenSSH** | The managed snippet uses **`Match LocalPort`** — **OpenSSH 8.9+** (e.g. Debian **bookworm+**, Ubuntu **22.04+**). On older **sshd**, replace or adjust the block manually. |
+| **SSH layout** | Sandbox settings are written with **`ansible.builtin.blockinfile`** into **`/etc/ssh/sshd_config`** between markers **`# BEGIN ANSIBLE MANAGED SANDBOX SSH`** / **`# END ...`**, then checked with **`sshd -t`** (via the module’s `validate` hook). |
+| **Firewall** | Allow **`sandbox_ssh_port`** (e.g. via **`core_firewall_rules`** in the **`core`** role). |
 
-## Role Variables
+---
 
-### Global Configuration
+## What runs (order)
 
-| Variable | Description | Default | 
-| ----- | ----- | ----- | 
-| `sandbox_managed` | Master toggle to enable/disable the sandbox setup. | `true` | 
-| `sandbox_ssh_port` | Dedicated port for incoming sandbox SSH connections. | `2222` | 
-| `sandbox_shared_user` | Name of the locked host user managing the connections. | `"sandbox"` | 
+1. **Validate** (`tasks/validate.yml`) — fails fast if **`sandbox_users`** is empty, a row is invalid, or names duplicate (avoids prune wiping every **`sandbox-*`** by mistake).
+2. **Prune** — Any Docker container whose name matches **`^sandbox-`** but is **not** in the expected set from **`sandbox_users`** is **stopped** (default) or **removed** (`sandbox_prune: true`).
+3. **Provision** — Host user **`sandbox_shared_user`**, **`/usr/local/bin/sandbox-login.sh`**, **`sudoers`**, **`authorized_keys`**, **`docker_container`** per entry, **`init-sandbox.sh`** inside the container, then **`blockinfile`** for **`sshd`**.
 
-### Virtual Users (`sandbox_users`)
+---
 
-The `sandbox_users` variable defines the mapped identities and their container parameters.
+## Ansible tags
 
-| Key | Type | Description | 
-| ----- | ----- | ----- | 
-| `name` | String | **(Required)** Identifier for the virtual user. | 
-| `image` | String | Docker image to use for the sandbox environment. | 
-| `shell` | String | Default shell to execute inside the container (e.g., `/bin/zsh`). | 
-| `ssh_keys` | List | **(Required)** List of raw public SSH keys permitted to access this container. | 
-| `ports` | List | Port bindings (e.g., `["127.0.0.1:8081:80"]`). | 
-| `volumes` | List | Volume bindings (e.g., `["/opt/data/guest1:/workspace"]`). | 
-| `env` | Dict | Environment variables injected into the sandbox. | 
-| `networks` | List | Docker networks to attach to the container. | 
-| `memory` / `cpus` | String/Float | Hard resource limits for the sandbox container. | 
+| Tag | Scope |
+|-----|--------|
+| `sandbox` | Validation, prune, and provision. |
+| `sandbox-prune` | Validation + prune only (still requires **`sandbox_managed: true`**). |
 
-## Example Playbook
+---
 
-```yaml
-- name: Deploy Sandbox Environments
-  hosts: servers
-  vars:
-    # Ensure the firewall allows the sandbox port
-    core_firewall_rules:
-      - { port: 2222, comment: "Sandbox SSH" }
-      - { port: 80, comment: "HTTP" }
-      - { port: 443, comment: "HTTPS" }
-      
-    sandbox_managed: true
-    sandbox_ssh_port: 2222
-    sandbox_users:
-      - name: "developer1"
-        image: "ghcr.io/YOUR_GITHUB_USERNAME/sandbox-base:latest"
-        shell: "/bin/zsh"
-        ssh_keys:
-          - "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQ..."
-        volumes:
-          - "/opt/sandbox_data/dev1:/workspace"
-        ports:
-          - "127.0.0.1:8081:8080"
-        memory: "512m"
-        cpus: 0.5
-        
-    # Proxy developer1's web service using the nginx role
-    nginx_sites:
-      - domain: "dev1.example.com"
-        upstream: "[http://127.0.0.1:8081](http://127.0.0.1:8081)"
-  roles:
-    - ahmz.server_setup.core
-    - ahmz.server_setup.sandbox
-    - ahmz.server_setup.nginx
+## Role variables
+
+### Global (`defaults/main.yml`)
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `sandbox_managed` | `true` | When false, the role does nothing (no validation/prune/provision). |
+| `sandbox_ssh_port` | `2222` | Extra **`sshd`** listener; **`Match LocalPort`** ties **`AllowUsers`** to this port. |
+| `sandbox_prune` | `false` | If **`true`**, unmanaged **`sandbox-*`** containers are **removed**; if **`false`**, they are **stopped**. |
+| `sandbox_shared_user` | `sandbox` | Locked host account used for SSH; clients authenticate **as this user** (see below). |
+
+### Virtual users: `sandbox_users`
+
+List of dictionaries. **Required per entry:** **`name`**, **`ssh_keys`** (non-empty list of full public key lines).
+
+| Key | Description |
+|-----|-------------|
+| `name` | Logical guest id; container **`sandbox-<name>`**; must match `^[a-zA-Z0-9][a-zA-Z0-9_.-]*$`. |
+| `image` | Image for **`docker_container`**; default **`ubuntu:24.04`** if omitted. |
+| `shell` | Interactive shell inside the container (default **`/bin/bash`** in **`authorized_keys`**). |
+| `ssh_keys` | Public keys allowed to map to this guest (forced `command=` per key). |
+| `ports` | Published ports (e.g. **`127.0.0.1:8081:8080`**). |
+| `volumes` | Bind/volume list; if omitted, **`/home/<shared_user>/<name>:/home/<name>`**. |
+| `working_dir` | Container working directory (default **`/home/<name>`**). |
+| `env` | Extra environment variables (merged with **`HOME=/home/<name>`**). |
+| `networks` | **`docker_container`** networks list. |
+| `memory` / `cpus` | Resource limits passed to **`community.docker.docker_container`**. |
+
+---
+
+## How clients connect
+
+Linux login is always **`sandbox_shared_user`** on **`sandbox_ssh_port`**. The **SSH public key** selects the virtual guest via **`authorized_keys`** `command="sudo ... sandbox-login.sh <name> <shell>"`.
+
+```bash
+ssh -p 2222 -i ~/.ssh/developer1_ed25519 sandbox@server.example.com
 ```
 
-## How It Works
+Use **`-i`** when multiple keys are loaded so the correct key matches the intended **`sandbox_users`** entry.
 
-1. User connects via `ssh developer1@server -p 2222`.
-2. SSHD authenticates via the mapped key in `authorized_keys`.
-3. A forced command (`command="sudo /usr/local/bin/sandbox-login.sh developer1 /bin/zsh"`) immediately intercepts the session.
-4. The wrapper drops the user into the `sandbox-developer1` Docker container, passing the correct `$TERM`, `$LANG`, and `$UID` environments natively.
+---
+
+## Example playbook
+
+```yaml
+- name: Deploy sandbox environments
+  hosts: servers
+  vars:
+    core_firewall_rules:
+      - { port: 2222, comment: "Sandbox SSH" }
+
+    sandbox_managed: true
+    sandbox_ssh_port: 2222
+    sandbox_prune: true
+
+    sandbox_users:
+      - name: developer1
+        image: ghcr.io/example/sandbox-base:latest
+        shell: /bin/zsh
+        ssh_keys:
+          - "ssh-ed25519 AAAA... comment"
+        volumes:
+          - /opt/sandbox_data/dev1:/workspace
+        ports:
+          - "127.0.0.1:8081:8080"
+        memory: 512m
+        cpus: 0.5
+
+    nginx_sites:
+      - domain: dev1.example.com
+        upstream: "http://127.0.0.1:8081"
+
+  roles:
+    - role: ahmz.server_setup.core
+    - role: ahmz.server_setup.sandbox
+    - role: ahmz.server_setup.nginx
+```
+
+---
+
+## Security and limitations
+
+- **Forwarding** is disabled in **`sshd`** and in **`authorized_keys`** options for the sandbox user.
+- **`sandbox-login.sh`** runs **`docker exec`**; **`SSH_ORIGINAL_COMMAND`** is passed through **`bash -c`** for non-interactive use — avoid untrusted control of that string.
+- **Prune** affects **every** container whose name matches **`^sandbox-`**, not only those created by this role; use naming discipline or adjust the role if you share that prefix.
+- **`Match LocalPort`** requires a recent **OpenSSH**; verify with **`sshd -V`** before relying on this role.
+
+---
+
+## Handlers
+
+- **`Restart sshd`** — **`service`** name **`ssh`** on Debian family, **`sshd`** elsewhere; tolerates missing **`ansible_facts`** by defaulting to **`sshd`**.
+
+---
 
 ## License
 
