@@ -32,7 +32,7 @@
         owner: "{{ acme_webroot_owner | default('www-data') }}"
         group: "{{ acme_webroot_group | default('www-data') }}"
       become: true
-      failed_when: false
+      ignore_errors: true
       register: acme_webroot_dir_result
 
     - name: Deploy test challenge file to webroot
