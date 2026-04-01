@@ -1,4 +1,8 @@
 ---
+collections:
+  - community.general
+  - ansible.posix
+
 galaxy_info:
   role_name: core
   author: AHMZ
@@ -6,7 +10,8 @@ galaxy_info:
     Core server provisioning and hardening — hostname, timezone, APT mirrors,
     package installation, user management, SSH hardening, sysctl kernel tuning,
     ipset management, iptables INPUT chain firewall, fail2ban intrusion prevention,
-    and centralized cron management.
+    and centralized cron management. Targets systemd-based Linux; firewall rule
+    persistence is implemented for Debian and Red Hat family only.
   license: MIT
   min_ansible_version: "2.14"
   platforms:
@@ -19,6 +24,7 @@ galaxy_info:
       versions:
         - bullseye
         - bookworm
+        - trixie
     - name: EL
       versions:
         - "8"
