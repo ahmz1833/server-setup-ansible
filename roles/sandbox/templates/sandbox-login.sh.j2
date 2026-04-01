@@ -10,7 +10,7 @@ VIRTUAL_USER="$1"
 USER_SHELL="${2:-/bin/bash}"
 CONTAINER="sandbox-$VIRTUAL_USER"
 
-if ! /usr/bin/docker ps -q -f name="^/${CONTAINER}$" >/dev/null; then
+if ! /usr/bin/docker ps -q -f name="^/${CONTAINER}$" | grep -q .; then
     echo "Access Denied: Sandbox environment '${VIRTUAL_USER}' is offline."
     exit 1
 fi
