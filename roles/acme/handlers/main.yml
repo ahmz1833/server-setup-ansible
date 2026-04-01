@@ -3,6 +3,7 @@
 - name: Reload systemd daemon
   ansible.builtin.systemd:
     daemon_reload: true
+  when: ansible_facts.get('service_mgr', '') == 'systemd'
   listen: "systemd daemon-reload"
 
 # Flexible certificate reload handler
@@ -15,8 +16,8 @@
       changed_when: true
       become: true
 
-    - name: Reload service via systemd
-      ansible.builtin.systemd:
+    - name: Reload service
+      ansible.builtin.service:
         name: "{{ acme_reload_service }}"
         state: reloaded
       when:

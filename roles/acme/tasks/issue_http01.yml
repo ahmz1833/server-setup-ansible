@@ -22,7 +22,7 @@
     # -------------------------------------------------------------------------
     - name: Generate test token for webroot detection
       ansible.builtin.set_fact:
-        acme_webroot_test_token: "acme-test-{{ ansible_date_time.epoch }}-{{ 999999 | random }}"
+        acme_webroot_test_token: "acme-test-{{ ansible_facts['date_time']['epoch'] }}-{{ 999999 | random }}"
 
     - name: Ensure webroot challenge directory exists
       ansible.builtin.file:
@@ -41,7 +41,7 @@
         dest: "{{ acme_webroot_path }}/.well-known/acme-challenge/{{ acme_webroot_test_token }}"
         mode: '0644'
       become: true
-      when: acme_webroot_dir_result is not failed
+      when: acme_webroot_dir_result is succeeded
       register: acme_webroot_file_result
 
     - name: Test webroot accessibility via HTTP
@@ -54,14 +54,14 @@
       failed_when: false
       delegate_to: localhost
       become: false
-      when: acme_webroot_file_result is not failed
+      when: acme_webroot_file_result is succeeded
 
     - name: Remove test challenge file
       ansible.builtin.file:
         path: "{{ acme_webroot_path }}/.well-known/acme-challenge/{{ acme_webroot_test_token }}"
         state: absent
       become: true
-      when: acme_webroot_file_result is not failed
+      when: acme_webroot_file_result is succeeded
 
     - name: Evaluate webroot availability
       ansible.builtin.set_fact:
@@ -140,6 +140,16 @@
           changed_when: false
           become: true
 
+        - name: Fail when port 80 is busy in non-interactive mode
+          ansible.builtin.fail:
+            msg: >-
+              Port 80 is in use (PID {{ acme_port80_pid.stdout }}). Free port 80,
+              fix webroot/HTTP reachability for HTTP-01, use DNS-01, or set
+              acme_noninteractive false and re-run to use the interactive prompt.
+          when:
+            - acme_port80_pid.stdout | length > 0
+            - acme_noninteractive | default(false) | bool
+
         - name: Prompt for port 80 intervention
           ansible.builtin.pause:
             prompt: |
@@ -155,7 +165,9 @@
 
               Your choice:
           register: acme_port80_prompt
-          when: acme_port80_pid.stdout | length > 0
+          when:
+            - acme_port80_pid.stdout | length > 0
+            - not (acme_noninteractive | default(false) | bool)
           delegate_to: localhost
           become: false
 
@@ -164,24 +176,24 @@
             msg: "Operation aborted by user. Port 80 is required for HTTP-01 challenge."
           when:
             - acme_port80_pid.stdout | length > 0
-            - acme_port80_prompt.user_input | lower not in ['auto', 'manual']
+            - acme_port80_prompt.user_input | default('') | lower not in ['auto', 'manual']
 
         - name: Stop conflicting service on port 80
-          ansible.builtin.systemd:
+          ansible.builtin.service:
             name: "{{ acme_port80_comm.stdout }}"
             state: stopped
           register: acme_service_stop
           when:
             - acme_port80_pid.stdout | length > 0
-            - acme_port80_prompt.user_input | lower == 'auto'
+            - acme_port80_prompt.user_input | default('') | lower == 'auto'
           failed_when: false
           become: true
 
-        - name: Kill process if systemd stop failed
+        - name: Kill process if service stop failed
           ansible.builtin.command: "kill -15 {{ acme_port80_pid.stdout }}"
           when:
             - acme_port80_pid.stdout | length > 0
-            - acme_port80_prompt.user_input | lower == 'auto'
+            - acme_port80_prompt.user_input | default('') | lower == 'auto'
             - acme_service_stop.failed | default(false)
           changed_when: true
           become: true
@@ -193,7 +205,7 @@
             timeout: 10
           when:
             - acme_port80_pid.stdout | length > 0
-            - acme_port80_prompt.user_input | lower == 'auto'
+            - acme_port80_prompt.user_input | default('') | lower == 'auto'
           become: true
 
         - name: Create temporary standalone webroot
@@ -261,11 +273,11 @@
           become: true
 
         - name: Restore conflicting service
-          ansible.builtin.systemd:
+          ansible.builtin.service:
             name: "{{ acme_port80_comm.stdout }}"
             state: started
           when:
             - acme_port80_pid.stdout | default('') | length > 0
             - acme_port80_prompt.user_input | default('') | lower == 'auto'
-            - not (acme_service_stop.failed | default(false))
+            - acme_service_stop is succeeded
           become: true

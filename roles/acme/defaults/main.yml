@@ -10,6 +10,11 @@ acme_account_email: "admin@example.com"
 # Local workspace for certificates and keys (on Ansible controller)
 acme_local_workspace: "/tmp/ansible_acme_workspace"
 
+# When true: no ansible.builtin.pause prompts (CI, -e automation). DNS-01 will
+# fail fast (TXT records need a human or a DNS API outside this role). HTTP-01
+# fails if port 80 is in use and webroot test did not succeed.
+acme_noninteractive: false
+
 # -----------------------------------------------------------------------------
 # Certificate Defaults
 # -----------------------------------------------------------------------------
@@ -29,6 +34,8 @@ acme_webroot_path: "/var/www/acme"
 
 # Timeout for webroot connectivity test (seconds)
 acme_webroot_test_timeout: 5
+
+# Optional for HTTP-01: acme_webroot_owner / acme_webroot_group (default www-data)
 
 # -----------------------------------------------------------------------------
 # Post-Renewal Hooks

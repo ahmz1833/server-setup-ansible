@@ -17,6 +17,15 @@
 - name: Prompt for DNS and validate    # noqa: no-handler
   when: acme_challenge is changed
   block:
+    - name: Refuse DNS-01 in non-interactive mode
+      ansible.builtin.fail:
+        msg: >-
+          DNS-01 needs manual TXT records (or external automation). This role does
+          not create DNS records. Set acme_noninteractive false for interactive
+          mode, use challenge http-01 with a reachable webroot, or issue certs
+          another way in CI.
+      when: acme_noninteractive | default(false) | bool
+
     - name: Prompt for manual DNS TXT record creation
       ansible.builtin.pause:
         prompt: |
@@ -44,7 +53,9 @@
           Verify propagation: dig TXT {{ (acme_challenge.challenge_data.keys() | list | first) | regex_replace('^', '_acme-challenge.') }}
 
           Press ENTER when all records have propagated globally.
-      when: acme_challenge.challenge_data is defined
+      when:
+        - acme_challenge.challenge_data is defined
+        - not (acme_noninteractive | default(false) | bool)
       delegate_to: localhost
       become: false
 
