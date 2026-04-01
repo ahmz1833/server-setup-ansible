@@ -56,11 +56,11 @@
 
 - name: Parse current X-UI settings
   ansible.builtin.set_fact:
-    _node_xui_current_port: "{{ _node_xui_current_settings.stdout | regex_search('port:\\s*(\\d+)', '\\1') | first | default('') }}"
-    _node_xui_current_path: "{{ _node_xui_current_settings.stdout | regex_search('webBasePath:\\s*(\\S+)', '\\1') | first | default('') }}"
-    _node_xui_current_user: "{{ _node_xui_current_settings.stdout | regex_search('username:\\s*(\\S+)', '\\1') | first | default('') }}"
-    _node_xui_current_cert: "{{ _node_xui_current_settings.stdout | regex_search('webCertFile:\\s*(\\S*)', '\\1') | first | default('') }}"
-    _node_xui_current_key: "{{ _node_xui_current_settings.stdout | regex_search('webKeyFile:\\s*(\\S*)', '\\1') | first | default('') }}"
+    _node_xui_current_port: "{{ _node_xui_current_settings.stdout | regex_search('port:\\s*(\\d+)', '\\1') | default([]) | first | default('') }}"
+    _node_xui_current_path: "{{ _node_xui_current_settings.stdout | regex_search('webBasePath:\\s*(\\S+)', '\\1') | default([]) | first | default('') }}"
+    _node_xui_current_user: "{{ _node_xui_current_settings.stdout | regex_search('username:\\s*(\\S+)', '\\1') | default([]) | first | default('') }}"
+    _node_xui_current_cert: "{{ _node_xui_current_settings.stdout | regex_search('webCertFile:\\s*(\\S*)', '\\1') | default([]) | first | default('') }}"
+    _node_xui_current_key: "{{ _node_xui_current_settings.stdout | regex_search('webKeyFile:\\s*(\\S*)', '\\1') | default([]) | first | default('') }}"
 
 - name: Determine if X-UI settings need update
   ansible.builtin.set_fact:
