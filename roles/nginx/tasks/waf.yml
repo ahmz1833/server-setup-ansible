@@ -49,6 +49,8 @@
 - name: Install CRS setup config via remote_asset
   ansible.builtin.include_role:
     name: ahmz.server_setup.asset
+    apply:
+      notify: Reload nginx
   vars:
     asset_name: "crs-setup"
     asset_type: "file"
@@ -57,7 +59,6 @@
     asset_dest: "/etc/modsecurity/crs-setup.conf"
     asset_extract: false
     asset_download_locally: "{{ nginx_download_locally | default(false) }}"
-  notify: Reload nginx
 
 - name: Create nginx modsec directory
   ansible.builtin.file:

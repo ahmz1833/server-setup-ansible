@@ -12,6 +12,14 @@
         file_type: file
       register: nginx_existing_sites
 
+    - name: Ensure site backup directory exists
+      ansible.builtin.file:
+        path: "{{ nginx_backup_dir }}/sites"
+        state: directory
+        mode: '0700'
+        owner: root
+        group: root
+
     - name: Backup existing site configurations
       ansible.builtin.copy:
         src: "{{ item.path }}"
@@ -20,14 +28,6 @@
         mode: '0644'
       loop: "{{ nginx_existing_sites.files | default([]) }}"
       when: nginx_existing_sites.files | default([]) | length > 0
-
-    - name: Ensure site backup directory exists
-      ansible.builtin.file:
-        path: "{{ nginx_backup_dir }}/sites"
-        state: directory
-        mode: '0700'
-        owner: root
-        group: root
 
 # -----------------------------------------------------------------------------
 # Generate Site Configurations
@@ -63,7 +63,7 @@
   ansible.builtin.file:
     path: "{{ item.path }}"
     state: absent
-  loop: "{{ nginx_enabled_sites.files }}"
+  loop: "{{ nginx_enabled_sites.files | default([]) }}"
   vars:
     expected_configs: >-
       {{
