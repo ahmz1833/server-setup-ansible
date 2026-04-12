@@ -1,7 +1,7 @@
 ---
 namespace: ahmz1833
 name: server_setup
-version: 1.0.0
+version: 1.0.1
 readme: README.md
 authors:
   - AHMZ <ahmz.ut@gmail.com>
