@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Lint and build collection
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install Ansible tooling
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install ansible-core ansible-lint pyyaml
+
+      - name: Install collection dependencies
+        run: |
+          ansible-galaxy collection install \
+            community.general \
+            community.crypto \
+            community.docker \
+            ansible.posix \
+            ansible.utils
+
+      - name: Lint Ansible content
+        run: |
+          ansible-lint --offline roles
+
+      - name: Build collection artifact
+        run: |
+          rm -rf dist
+          ansible-galaxy collection build --force --output-path dist
+
+      - name: Install built collection
+        run: |
+          install_path="${RUNNER_TEMP}/collection-install"
+          mkdir -p "$install_path"
+          artifact="$(find dist -maxdepth 1 -name '*.tar.gz' -print -quit)"
+          test -n "$artifact"
+          ansible-galaxy collection install "$artifact" -p "$install_path"

@@ -78,6 +78,12 @@ The artifact name is **`{namespace}-{name}-{version}.tar.gz`**.
 
 Ensure the **`namespace`** in `galaxy.yml` matches your Galaxy namespace (**`ahmz1833`**).
 
+GitHub Actions now automates this flow:
+
+- Pull requests and pushes to **`master`** run linting plus a build/install smoke test.
+- Tag pushes publish to Galaxy after verifying the tag matches the **`galaxy.yml`** `version`.
+- Set the repository secret **`GALAXY_API_TOKEN`** for publishing.
+
 ---
 
 ## Roles overview
