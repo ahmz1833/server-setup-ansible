@@ -61,6 +61,19 @@
     asset_download_locally: "{{ node_download_locally | default(false) }}"
   when: node_bootstrap_enabled and node_starship_version is defined and (node_starship_version | length > 0)
 
+- name: Install wgcf via remote_asset role
+  ansible.builtin.include_role:
+    name: ahmz1833.server_setup.asset
+  vars:
+    asset_name: "wgcf"
+    asset_version: "{{ node_wgcf_version }}"
+    asset_url: "github.com/ViRb3/wgcf/releases/download/v%v/wgcf_%v_linux_{{ node_arch_go_platform_suffix }}"
+    asset_extract: false
+    asset_version_cmd: "--version"
+    asset_version_regex: 'v?([0-9.]+)'
+    asset_download_locally: "{{ node_download_locally | default(false) }}"
+  when: node_wgcf_install and node_wgcf_version is defined and (node_wgcf_version | length > 0)
+
 - name: Download and execute bootstrap script
   become: true
   become_user: "{{ node_primary_user }}"

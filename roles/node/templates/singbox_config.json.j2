@@ -106,7 +106,7 @@
       "address": ["{{ node_singbox_tun_inet4_address }}"{% if node_enable_ipv6 %},"{{ node_singbox_tun_inet6_address }}"{% endif %}]
 {%- if direct_rulesets | length > 0 %},
       "route_exclude_address_set": [{% for rs in direct_rulesets %}"{{ rs.tag }}"{% if not loop.last %}, {% endif %}{% endfor %}]
-{%- endif %}
+{% endif %}
     }
 {% endif %}
   ],

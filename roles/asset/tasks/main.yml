@@ -53,20 +53,24 @@
         - name: "Parse installed version: {{ asset_name }}"
           ansible.builtin.set_fact:
             _asset_installed_version: >-
-              {%- if (asset_type | default('binary')) == 'binary'
-                    and _asset_version_binary is defined -%}
-                {%- set _out = _asset_version_binary.stdout | default('') ~ _asset_version_binary.stderr | default('') -%}
-                {%- set _match = _out | regex_search(asset_version_regex, '\1') -%}
-                {{ (_match | first) if _match else '' }}
-              {%- elif (asset_type | default('binary')) in ['file', 'package']
-                    and _asset_version_file is defined -%}
-                {{
-                  (_asset_version_file.content | b64decode | trim)
-                  if _asset_version_file.content is defined else ''
-                }}
-              {%- else -%}
-                {{ '' }}
-              {%- endif -%}
+               {%- if (asset_type | default('binary')) == 'binary'
+                      and _asset_version_binary is defined -%}
+                  {%- set _out = (_asset_version_binary.stdout | default('') | string) ~ (_asset_version_binary.stderr | default('') | string) -%}
+                  {%- if _out | length > 0 and asset_version_regex | default('') | length > 0 -%}
+                    {%- set _match = _out | regex_search(asset_version_regex, '\\1', ignorecase=False) | default([]) -%}
+                    {{ (_match[0] | default('')) if _match is iterable and _match is not string else '' }}
+                  {%- else -%}
+                    {{ '' }}
+                  {%- endif -%}
+                {%- elif (asset_type | default('binary')) in ['file', 'package']
+                      and _asset_version_file is defined -%}
+                  {{
+                    (_asset_version_file.content | b64decode | trim)
+                    if _asset_version_file.content is defined else ''
+                  }}
+                {%- else -%}
+                  {{ '' }}
+                {%- endif -%}
 
 # Split set_fact into two tasks to avoid variable reference timing issues
 - name: "Resolve target version: {{ asset_name }}"

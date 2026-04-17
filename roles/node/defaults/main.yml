@@ -269,6 +269,8 @@ node_fzf_version: '0.70.0'
 node_eza_version: '0.23.4'
 node_zoxide_version: '0.9.9'
 node_starship_version: '1.24.2'
+node_wgcf_install: false
+node_wgcf_version: '2.2.30'
 node_bootstrap_script_url: "{{ node_internet_restricted | default(false) |
   ternary('https://s3.ahmz.ir/dots/bootstrap.sh',
   'https://raw.githubusercontent.com/ahmz1833/dots/main/bootstrap.sh') }}"

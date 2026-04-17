@@ -33,5 +33,4 @@ galaxy_info:
     - monitoring
     - tools
 
-dependencies:
-  - role: asset
+dependencies: []

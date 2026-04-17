@@ -34,7 +34,7 @@ Designed for **systemd** Linux. **Gather facts** must be enabled so `ansible_fac
 `tasks/main.yml` runs (when each section’s install/toggle allows):
 
 1. **sing-box** — `node_singbox_install`
-2. **tools** — packages + fzf/eza/zoxide/starship (+ lazydocker if Docker on) + optional bootstrap
+2. **tools** — packages + fzf/eza/zoxide/starship/wgcf (+ lazydocker if Docker on) + optional bootstrap
 3. **GOST** — `node_gost_install`
 4. **X-UI** — `node_xui_install`
 5. **Docker** — `node_docker_enabled`
@@ -64,6 +64,7 @@ Designed for **systemd** Linux. **Gather facts** must be enabled so `ansible_fac
 | `node_exporter_install` | `true` | `node_exporter_enabled` |
 | `node_bootstrap_enabled` | `true` | — |
 | `node_lazydocker_install` | `{{ node_docker_enabled }}` | — |
+| `node_wgcf_install` | `false` | — |
 
 Use **`_install`** to pull in files/packages; use **`_enabled`** (where present) to control **systemd** start/enabled.
 
@@ -75,7 +76,7 @@ Under **`defaults/main.yml` → ARCHITECTURE**, maps translate `ansible_facts['a
 
 - **Docker static** tarball (`download.docker.com` … `x86_64`, `aarch64`, `armhf`, …)
 - **Buildx** / **Compose** plugin filenames (different suffix rules)
-- **Tools** (eza/zoxide/starship/lazydocker/fzf/gost) triples or Go-style suffixes
+- **Tools** (eza/zoxide/starship/lazydocker/fzf/gost/wgcf) triples or Go-style suffixes
 
 Unmapped CPU families fall back to the raw architecture string (downloads may **404**). Override the relevant `node_arch_*` or `node_docker_*` fact per host if needed.
 

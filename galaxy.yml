@@ -1,7 +1,7 @@
 ---
 namespace: ahmz1833
 name: server_setup
-version: 1.0.1
+version: 1.0.2
 readme: README.md
 authors:
   - AHMZ <ahmz.ut@gmail.com>
@@ -40,11 +40,11 @@ homepage: https://github.com/ahmz1833/server-setup
 issues: https://github.com/ahmz1833/server-setup/issues
 
 dependencies:
-  community.general: ">=5.0.0"
-  community.crypto: ">=2.0.0"
-  community.docker: ">=3.0.0"
-  ansible.posix: ">=1.4.0"
-  ansible.utils: ">=2.0.0"
+  community.general: ">=8.0.0"
+  community.crypto: ">=2.20.0"
+  community.docker: ">=4.0.0"
+  ansible.posix: ">=1.5.0"
+  ansible.utils: ">=4.0.0"
 
 build_ignore:
   - _legacy
