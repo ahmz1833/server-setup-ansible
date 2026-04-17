@@ -316,6 +316,7 @@ node_xui_version: "2.4.8"
 
 # Panel Configuration (Ansible acts as the Source of Truth)
 node_xui_port: 2053
+node_xui_sub_port: 2096
 node_xui_web_base_path: "/secret-panel/" # Must include slashes
 node_xui_username: "admin"
 node_xui_password: "admin"

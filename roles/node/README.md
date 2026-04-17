@@ -107,7 +107,7 @@ Unmapped CPU families fall back to the raw architecture string (downloads may **
 
 ## X-UI and GOST
 
-- **X-UI**: panel settings are applied from role variables (`node_xui_*`); see **`defaults/main.yml`** and `tasks/xui.yml`.
+- **X-UI**: panel port and subscription port default to `node_xui_port` and `node_xui_sub_port`; override both per host when you need custom listener ports.
 - **GOST**: configuration is YAML in `node_gost_config`; see **`examples/gost.yml`**.
 
 ---
