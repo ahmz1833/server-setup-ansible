@@ -25,6 +25,7 @@
     path: "{{ item }}"
     mode: '0755'
   loop:
+    - /usr/local/x-ui
     - /usr/local/x-ui/x-ui
     - /usr/local/x-ui/x-ui.sh
 

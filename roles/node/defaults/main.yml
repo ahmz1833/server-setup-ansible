@@ -312,7 +312,7 @@ node_gost_config: {}
 node_xui_install: false
 node_xui_enabled: false
 node_xui_repo: "MHSanaei/3x-ui"
-node_xui_version: "2.4.8"
+node_xui_version: "2.8.11"
 
 # Panel Configuration (Ansible acts as the Source of Truth)
 node_xui_port: 2053
